@@ -1,6 +1,20 @@
-/* Sidebar: the conversation list. */
+/* Sidebar: the conversation list.
+ *
+ * One visual language across the app: cards sit on --bg inside the --bg-raised column,
+ * round at --radius, quiet border, and only the selected row is allowed to be loud. The
+ * list has five states that a demo will hit — populated, filtering, nothing matched,
+ * scanning, and hover/focus on a row — and each one is styled here rather than left to
+ * the browser default.
+ *
+ * Tokens that only this surface needs are declared in this file, per the ownership rule
+ * that styles/base.css is frozen. */
 
+/* The list is one column of equal-width cards; every section inside it lines up on the
+ * same left edge and the same gutter, so a scroll never shows a ragged margin. */
 .sidebar {
+  --sb-card: 10px;
+  --sb-gap: 4px;
+  --sb-ring: 0 0 0 2px var(--accent-soft), 0 0 0 1px var(--accent);
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -13,8 +27,8 @@
 .sidebar__title {
   margin: 0;
   font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 0.2px;
+  font-weight: 700;
+  letter-spacing: 0.1px;
 }
 .sidebar__meta {
   margin: 4px 0 0;
@@ -34,8 +48,28 @@
   font: inherit;
   font-size: 12px;
   outline: none;
+  transition: border-color 0.12s, box-shadow 0.12s, background 0.12s;
+}
+/* Chromium draws a native clear affordance on type=search; match it to the field. */
+.sidebar__search input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 11px;
+  height: 11px;
+  background: currentColor;
+  color: var(--text-faint);
+  cursor: pointer;
+  mask: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2 2l8 8M10 2l-8 8' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+}
+.sidebar__search input:hover {
+  border-color: #313846;
+}
+.sidebar__search input::placeholder {
+  color: var(--text-faint);
 }
 .sidebar__search input:focus {
+  background: var(--bg);
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-soft);
 }
@@ -43,78 +77,399 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 4px 8px 12px;
+  overscroll-behavior: contain;
+  padding: 0 8px 14px;
 }
+
+/* ── Status strip ───────────────────────────────────────────────────────────
+ * The one place that always says what the list is doing. Without it, a scan and a
+ * filter that matched everything look identical: the same rows, no explanation. */
+.listbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 26px;
+  margin: 0 0 8px;
+  padding: 6px 9px;
+  color: var(--text-faint);
+  font-size: 11.5px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+}
+.listbar--busy {
+  color: var(--text-dim);
+  border-color: var(--accent-soft);
+}
+.listbar__count {
+  color: var(--text);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.listbar__what {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.spinner {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: sb-spin 0.7s linear infinite;
+}
+@keyframes sb-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 2.4s; }
+}
+
+/* ── Skeleton, for the first scan ────────────────────────────────────────────
+ * The list's shape is known before its contents are, so show the shape rather than an
+ * empty rectangle that says nothing. */
+.skeleton {
+  margin-bottom: var(--sb-gap);
+  padding: 11px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--sb-card);
+}
+.skeleton__line {
+  height: 9px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #1b1f28 0%, #232833 50%, #1b1f28 100%);
+  background-size: 240% 100%;
+  animation: sb-shimmer 1.4s ease-in-out infinite;
+}
+.skeleton__line--title { width: 72%; }
+.skeleton__line--meta { width: 44%; margin-top: 7px; }
+.skeleton:nth-child(2n) .skeleton__line--title { width: 58%; }
+.skeleton:nth-child(3n) .skeleton__line--meta { width: 56%; }
+@keyframes sb-shimmer {
+  from { background-position: 120% 0; }
+  to { background-position: -120% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton__line { animation: none; background: #1b1f28; }
+}
+
+/* ── Sections ──────────────────────────────────────────────────────────────── */
 .group {
-  margin-bottom: 10px;
+  margin-bottom: 6px;
+}
+.group--ready {
+  margin-bottom: 2px;
 }
 .group__head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 8px 5px;
+  padding: 10px 8px 6px;
   color: var(--text-faint);
   font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.7px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
   text-transform: uppercase;
 }
-.group__count {
-  font-weight: 500;
-  letter-spacing: 0;
-  text-transform: none;
+.group--ready .group__head {
+  color: var(--accent);
 }
+.group__name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.group__count {
+  flex: 0 0 auto;
+  min-width: 18px;
+  padding: 1px 6px;
+  color: var(--text-faint);
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  text-align: center;
+  text-transform: none;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 20px;
+}
+.group--ready .group__count {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+.group__note {
+  margin: 0 8px 8px;
+  color: var(--text-faint);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+/* The divider between the conversations that work and the ones that cannot. One
+ * explanation here replaces one "short" badge on all 37 other rows. */
+.split {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 14px 8px 2px;
+}
+.split__line {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.split__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-faint);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.split__count {
+  min-width: 18px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  text-align: center;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 20px;
+}
+/* Said once, here, instead of on all 37 rows. */
+.split__note {
+  margin: 6px 8px 4px;
+  color: var(--text-faint);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+/* ── Row ───────────────────────────────────────────────────────────────────── */
 .row {
   display: block;
   width: 100%;
-  padding: 10px 11px;
-  margin-bottom: 3px;
+  padding: 9px 11px 9px 12px;
+  margin-bottom: var(--sb-gap);
   color: inherit;
   text-align: left;
   background: var(--bg);
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--sb-card);
   font: inherit;
   cursor: pointer;
-  transition: background 0.1s, border-color 0.1s;
+  outline: none;
+  transition: background 0.12s, border-color 0.12s, transform 0.12s, box-shadow 0.12s;
 }
 .row:hover {
   background: var(--bg-hover);
-  border-color: var(--border);
+  border-color: #333a49;
+  transform: translateX(2px);
 }
+/* The one loud row. A left bar reads as "you are here" without a highlight colour
+ * fighting the accent used for the ready badge. */
 .row[aria-current='true'] {
   background: var(--bg-active);
+  border-color: #3a4358;
+  box-shadow: inset 3px 0 0 var(--accent);
+  transform: none;
+}
+.row[aria-current='true'] .row__title {
+  color: var(--text);
+}
+/* Keyboard focus is drawn here rather than left to the UA, which would draw a default
+ * rectangle around a rounded card. :focus-visible so a click does not leave a ring. */
+.row:focus-visible {
   border-color: var(--accent);
+  box-shadow: var(--sb-ring);
+}
+.row[aria-current='true']:focus-visible {
+  box-shadow: inset 3px 0 0 var(--accent), var(--sb-ring);
+}
+.row__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .row__title {
-  display: block;
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font-size: 14.5px;
+  color: var(--text-dim);
+  font-size: 13.5px;
   font-weight: 600;
   letter-spacing: -0.1px;
 }
+.row__pill {
+  flex: 0 0 auto;
+  padding: 1px 7px;
+  color: var(--accent);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  background: var(--accent-soft);
+  border-radius: 20px;
+}
 .row__meta {
   display: flex;
-  gap: 6px;
-  margin-top: 4px;
+  align-items: baseline;
+  gap: 5px;
+  margin-top: 3px;
   color: var(--text-faint);
   font-size: 11.5px;
 }
-.row__meta span {
+.row__meta > span {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+/* The project name is the part worth reading, so it keeps its space and the rest
+ * truncates. */
+.row__project {
+  flex: 0 1 auto;
+  min-width: 0;
+  color: var(--text-dim);
+}
+.row__harness,
+.row__time {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.row__time {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
 .row__dot {
+  flex: 0 0 auto;
   color: var(--border);
+}
+
+/* A ready row earns the full-strength title; the rest read as available but quiet. */
+.row--ready {
+  background: var(--bg);
+  border-color: var(--border);
+}
+.row--ready .row__title {
+  color: var(--text);
+  font-size: 14.5px;
+}
+.row--ready:hover {
+  border-color: var(--accent);
 }
 .row--absent {
   opacity: 0.45;
   cursor: default;
 }
+
+/* ── Empty states ────────────────────────────────────────────────────────────
+ * Both explain what happened and offer the next move. Neither is a bare sentence in
+ * the middle of an empty column. */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 30px 20px 24px;
+  text-align: center;
+}
+.empty__mark {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  margin-bottom: 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 50%;
+}
+/* Magnifier: a ring with a handle, drawn in CSS so no icon font or image is needed. */
+.empty__mark::after {
+  content: '';
+  position: absolute;
+  right: -4px;
+  bottom: -2px;
+  width: 9px;
+  height: 1.5px;
+  background: var(--border);
+  transform: rotate(45deg);
+  transform-origin: left center;
+}
+/* A record, for "there is nothing here at all". */
+.empty__mark--record::after {
+  right: auto;
+  bottom: auto;
+  top: 50%;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  background: var(--border);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+.empty__title {
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.empty__query {
+  margin: 5px 0 0;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.empty__body {
+  margin: 8px 0 0;
+  max-width: 26ch;
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.empty__action {
+  margin-top: 16px;
+  padding: 7px 14px;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.empty__action:hover {
+  background: var(--bg-active);
+  border-color: #3a4250;
+}
+.empty__action:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--sb-ring);
+}
+.empty__hint {
+  margin: 12px 0 0;
+  max-width: 26ch;
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/* The placeholder the markup ships with, and the bridge-missing message app.js writes
+ * into the list. Kept so neither ever falls back to bare text. */
 .placeholder {
   padding: 18px 12px;
   color: var(--text-faint);
@@ -134,4 +489,11 @@
   color: var(--text-faint);
   font-size: 10.5px;
   min-height: 14px;
+}
+
+@media (max-width: 760px) {
+  .sidebar__head { padding: 12px 12px 8px; }
+  .sidebar__search { padding: 0 10px 8px; }
+  .sidebar__list { padding: 0 6px 12px; }
+  .row__pill { padding: 1px 6px; }
 }

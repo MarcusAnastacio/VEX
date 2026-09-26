@@ -40,6 +40,355 @@ const timeAgo = (ms) => {
   return `${Math.floor(days / 365)}y ago`;
 };
 
+// ── Project label ──────────────────────────────────────────────────────────
+//
+// `project` is whatever the harness's store path implied, which is often a filename:
+// "claude-code/session.jsonl", "-workspace-gjc-demo/session.jsonl",
+// "transcripts/7c9e2d2c-0000-4000-8000-000000000000.jsonl". None of that belongs in a
+// row subtitle. When the backend can tell us the real working directory we use it, and
+// otherwise we recover as much of a name as the path allows.
+
+/** Path segments that describe the store layout, never the project. */
+const STORE_SEGMENTS = new Set([
+  'sessions', 'session', 'projects', 'project', 'chats', 'chat',
+  'threads', 'thread', 'tasks', 'task', 'conversations', 'conversation', 'transcripts',
+  'transcript', 'history', 'rollout', 'rollouts', 'logs', 'log', 'state', 'data',
+  'agents', 'agent', 'workspace', 'workspaces', 'workspacestorage', 'globalstorage',
+  'storage', 'main', 'home', 'code', 'dev', 'users', 'user', 'tmp', 'var', 'opt',
+]);
+
+/** Segment names that identify nothing to a reader: ids, timestamps, generated names. */
+const OPAQUE = new RegExp([
+  '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', // uuid
+  '^[0-9a-f]{16,}$', // long hex digest
+  '^[0-9a-f]{8}$', // short hash
+  '^\\d{9,15}$', // epoch millis, or a task directory named by date
+  '^(?:sess|wd|session)[_-]', // generated session folders
+].join('|'), 'i');
+
+/** Filenames every store uses for "the transcript", which say nothing about the project. */
+const STORE_FILES = new RegExp(
+  '^(?:session|transcript|thread|events|updates|wire|messages?|conversation|history|turns|log'
+  + '|api_conversation_history|rollout-.*|.*_history)$',
+  'i',
+);
+
+const FILE_EXT = /\.(jsonl|ndjson|json|sql|sqlite|db|md|log|txt|ya?ml)$/i;
+
+const isStoreSegment = (name) => STORE_SEGMENTS.has(name.toLowerCase()) || OPAQUE.test(name);
+const isStoreFile = (name) => FILE_EXT.test(name);
+
+/**
+ * The most human-sounding segment of a path, or '' when there isn't one.
+ * Prefers a real cwd, then `project`, then the store path the id was built from.
+ */
+export function projectLabel(session = {}) {
+  for (const source of [session.cwd, session.project, session.path]) {
+    const segments = splitPath(source);
+    if (!segments.length) continue;
+    const label = pickSegment(segments);
+    if (label) return label;
+  }
+  return 'Unknown project';
+}
+
+function splitPath(value) {
+  let text = String(value ?? '').trim();
+  if (!text) return [];
+  // Harnesses percent-encode the separator inside a single directory name.
+  try { text = decodeURIComponent(text); } catch { /* keep the raw text */ }
+  return text
+    .split(/[\\/]+/)
+    .map((part) => part.trim().replace(/^['"]|['"]$/g, ''))
+    // Claude Code and friends encode the project as "--workspace-app--".
+    .map((part) => {
+      const wrapped = /^--(.+)--$/.exec(part);
+      return (wrapped ? wrapped[1] : part).replace(/^-+|-+$/g, '');
+    })
+    // Dotfiles are configuration, not a project name.
+    .filter((part) => part && !part.startsWith('.'))
+    .map((name) => ({ name: name.replace(FILE_EXT, ''), file: isStoreFile(name) }));
+}
+
+function pickSegment(segments) {
+  const named = segments.filter((s) => !isStoreSegment(s.name));
+  // Fall back to the raw path rather than giving up: a name like "main" is thin, but it
+  // is still more use than a blank subtitle.
+  const pool = named.length ? named : segments;
+  // A store file never names the project, so prefer a directory that sits above it.
+  const dirs = pool.filter((s) => !s.file);
+  const use = dirs.length ? dirs : pool;
+  const last = use[use.length - 1];
+  if (!last) return '';
+  if (STORE_FILES.test(last.name)) {
+    const above = use[use.length - 2];
+    if (above && !STORE_FILES.test(above.name)) return above.name;
+  }
+  return isStoreSegment(last.name) ? '' : last.name;
+}
+
+/** Everything the filter should match, in one string, lowercased by the caller. */
+const haystack = (session) =>
+  `${session.title} ${session.project} ${session.harnessName} ${session.cwd ?? ''} ${projectLabel(session)}`
+    .toLowerCase();
+
+// ── Scan state ─────────────────────────────────────────────────────────────
+//
+// app.js owns the state; this component only watches the two lines of chrome whose text
+// it can already see, so the list can say what is happening instead of showing a dead
+// rectangle. Nothing here is authoritative: if the answer is wrong the list still
+// renders every session it was handed.
+//
+// One wrinkle: app.js writes the headline BEFORE calling renderSidebar() and the footer
+// hint AFTER it, so the hint we read during a render is always one render stale. The
+// re-check at the bottom of renderSidebar settles that on the next frame.
+
+let scanningSince = 0;
+const SCAN_TRUST_MS = 20_000;
+
+function isScanning(doc) {
+  const summary = doc.getElementById('summary')?.textContent?.trim() ?? '';
+  const hint = doc.getElementById('progress')?.textContent?.trim() ?? '';
+  const busy = summary === 'Scanning your disk…'
+    || /^scanning/i.test(hint)
+    // The per-harness progress events read "Claude Code: 12".
+    || /^[^:]{1,40}:\s*\d+$/.test(hint);
+  if (!busy) { scanningSince = 0; return false; }
+  // A failed scan leaves "Scanning…" in the footer forever; stop believing it eventually.
+  if (!scanningSince) scanningSince = Date.now();
+  return Date.now() - scanningSince < SCAN_TRUST_MS;
+}
+
+// ── Rows ───────────────────────────────────────────────────────────────────
+
+const byNewest = (a, b) => (b.updated || 0) - (a.updated || 0);
+
+/** "codex" and "Codex CLI" are the same thing; showing both is noise, not information. */
+const isSameName = (a, b) => {
+  const one = String(a ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const two = String(b ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!one || !two) return false;
+  if (one === two) return true;
+  const [short, long] = one.length <= two.length ? [one, two] : [two, one];
+  return short.length >= 3 && long.includes(short);
+};
+
+const countLabel = (n) => `${n} message${n === 1 ? '' : 's'}`;
+
+function row(session, { selectedId, onSelect, ready }) {
+  const label = projectLabel(session);
+  const when = timeAgo(session.updated);
+  // On a ready row the harness is the heading, because the row sits outside a group. On
+  // a grouped row the group header already says it.
+  const middle = ready
+    ? (isSameName(label, session.harnessName) ? countLabel(session.messageCount) : label)
+    : label;
+  return h(
+    'button',
+    {
+      class: ready ? 'row row--ready' : 'row',
+      type: 'button',
+      'aria-current': String(selectedId === session.id),
+      title: `${session.title}\n${label}\n${session.messageCount} messages`
+        + (ready ? '' : '\nToo short to quiz from'),
+      onclick: () => onSelect(session.id),
+    },
+    h(
+      'span',
+      { class: 'row__head' },
+      h('span', { class: 'row__title', text: clamp(session.title, 30) }),
+      ready && h('span', { class: 'row__pill', text: 'Quiz ready' }),
+    ),
+    h(
+      'span',
+      { class: 'row__meta' },
+      ready && h('span', { class: 'row__harness', text: session.harnessName }),
+      middle && h('span', { class: 'row__project', text: middle }),
+      middle && when && h('span', { class: 'row__dot', text: '·' }),
+      h('span', { class: 'row__time', text: when }),
+    ),
+  );
+}
+
+/** A group of rows under a heading. `name` is the harness, or a section label. */
+function section(name, count, items, options) {
+  return h(
+    'div',
+    { class: options.sectionClass ? `group ${options.sectionClass}` : 'group' },
+    h(
+      'div',
+      { class: 'group__head' },
+      h('span', { class: 'group__name', text: name }),
+      h('span', { class: 'group__count', text: String(count) }),
+    ),
+    options.note && h('p', { class: 'group__note', text: options.note }),
+    ...items.map((session) => row(session, { ...options, ready: !!options.ready })),
+  );
+}
+
+/**
+ * @param {HTMLElement} container
+ * @param {object} props { sessions, selectedId, filter, onSelect }
+ */
+export function renderSidebar(container, { sessions = [], selectedId = null, filter = '', onSelect = () => {} } = {}) {
+  const doc = container.ownerDocument || document;
+  const query = filter.trim();
+  const needle = query.toLowerCase();
+  const shown = needle
+    ? sessions.filter((s) => haystack(s).includes(needle))
+    : sessions;
+
+  const scanning = isScanning(doc);
+
+  container.replaceChildren();
+
+  // Status strip. One place at the top of the list that always says what is happening,
+  // so no state is signalled by an absence.
+  if (scanning) {
+    container.append(
+      h(
+        'div',
+        { class: 'listbar listbar--busy' },
+        h('span', { class: 'spinner' }),
+        h('span', { text: shown.length ? 'Rescanning your disk…' : 'Scanning your disk for agent conversations…' }),
+      ),
+    );
+  } else if (needle) {
+    container.append(
+      h(
+        'div',
+        { class: 'listbar' },
+        h(
+          'span',
+          { class: 'listbar__count', text: `${shown.length} of ${sessions.length}` },
+        ),
+        h('span', { class: 'listbar__what', text: `matching “${clamp(query, 24)}”` }),
+      ),
+    );
+  }
+
+  if (shown.length === 0) {
+    if (scanning) {
+      // Skeleton rows, not a blank rectangle: the shape of the list is already known.
+      for (let i = 0; i < 5; i += 1) {
+        container.append(
+          h(
+            'div',
+            { class: 'skeleton' },
+            h('div', { class: 'skeleton__line skeleton__line--title' }),
+            h('div', { class: 'skeleton__line skeleton__line--meta' }),
+          ),
+        );
+      }
+      return;
+    }
+    container.append(needle ? noMatches(doc, query) : noConversations(doc, sessions.length));
+    return;
+  }
+
+  // Ready sessions lead, everything else below a labelled divider.
+  //
+  // Both halves were on the table: sorting ready-first inside the existing per-harness
+  // groups, and de-emphasising the thin rows. Grouping won for the thin rows and lost for
+  // the ready ones — with 33 harness groups, a ready session sorted to the top of *its*
+  // group is still several screens down, so the list would still open on a dead row.
+  // Ready-first puts the three conversations that can actually make a quiz in the first
+  // screenful, and one divider replaces 37 repetitions of the word "short".
+  const ready = shown.filter((s) => s.quizReady).sort(byNewest);
+  const rest = shown.filter((s) => !s.quizReady).sort(byNewest);
+
+  if (ready.length) {
+    container.append(section('Ready to quiz', ready.length, ready, {
+      sectionClass: 'group--ready', ready: true, selectedId, onSelect,
+    }));
+  }
+
+  if (rest.length) {
+    if (ready.length) {
+      container.append(
+        h(
+          'div',
+          { class: 'split' },
+          h('span', { class: 'split__line' }),
+          h(
+            'span',
+            { class: 'split__label' },
+            h('span', { class: 'split__text', text: 'Everything else' }),
+            h('span', { class: 'split__count', text: String(rest.length) }),
+          ),
+          h('span', { class: 'split__line' }),
+        ),
+        h('p', {
+          class: 'split__note',
+          text: `${rest.length} conversations are too short to quiz from. You can still open one and read it.`,
+        }),
+      );
+    }
+
+    // Group by agent so the bulk of the list reads as "what did I use", newest first.
+    const groups = new Map();
+    for (const session of rest) {
+      const key = session.harnessName || session.harness;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(session);
+    }
+    for (const [name, items] of [...groups].sort((a, b) => byNewest(a[1][0], b[1][0]))) {
+      container.append(section(name, items.length, items, { selectedId, onSelect }));
+    }
+  }
+  // app.js writes the footer hint AFTER calling this, so the decision above is made
+  // against last render's hint. Re-check on the next frame and redraw once if the scan
+  // state moved; this settles the strip the moment a scan finishes.
+  if (typeof requestAnimationFrame === 'function') {
+    const props = { sessions, selectedId, filter, onSelect };
+    requestAnimationFrame(() => {
+      if (container.isConnected && isScanning(container.ownerDocument || document) !== scanning) {
+        renderSidebar(container, props);
+      }
+    });
+  }
+}
+
+/** The weakest state in the list, so it gets the most copy. */
+function noMatches(doc, query) {
+  const clear = () => {
+    const input = doc.getElementById('search');
+    if (!input) return;
+    input.value = '';
+    // app.js re-renders from the input event, exactly as if the user had cleared it.
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.focus();
+  };
+  return h(
+    'div',
+    { class: 'empty' },
+    h('div', { class: 'empty__mark' }),
+    h('h3', { class: 'empty__title', text: 'Nothing matches that filter' }),
+    h('p', { class: 'empty__query', text: `“${clamp(query, 40)}”` }),
+    h('p', {
+      class: 'empty__body',
+      text: 'The filter looks at the conversation title, the project it ran in, and the agent that wrote it.',
+    }),
+    h('button', { class: 'empty__action', type: 'button', text: 'Clear the filter', onclick: clear }),
+  );
+}
+
+function noConversations(doc) {
+  const rescan = () => doc.getElementById('refresh')?.click();
+  return h(
+    'div',
+    { class: 'empty' },
+    h('div', { class: 'empty__mark empty__mark--record' }),
+    h('h3', { class: 'empty__title', text: 'No conversations found' }),
+    h('p', {
+      class: 'empty__body',
+      text: 'We looked for Claude Code, Codex, Cursor, Copilot and 30-odd other agents in their usual places on this machine, and found nothing yet.',
+    }),
+    h('button', { class: 'empty__action', type: 'button', text: 'Rescan', onclick: rescan }),
+    h('p', { class: 'empty__hint', text: 'Or load the bundled sample stores from “Demo data” to see how this looks.' }),
+  );
+}
+
 /** The line under the "Conversations" heading. */
 export function summaryText({ catalog, capabilities }) {
   if (!catalog) return 'Scanning your disk…';
@@ -51,72 +400,4 @@ export function summaryText({ catalog, capabilities }) {
   if (capabilities?.requiresApiKey) bits.push('no API key');
   if (catalog.sqlite && catalog.sqlite.available === false) bits.push('no SQLite decoding');
   return bits.join(' · ');
-}
-
-/**
- * @param {HTMLElement} container
- * @param {object} props { sessions, selectedId, filter, onSelect }
- */
-export function renderSidebar(container, { sessions = [], selectedId = null, filter = '', onSelect = () => {} } = {}) {
-  const query = filter.trim().toLowerCase();
-  const shown = query
-    ? sessions.filter((s) => `${s.title} ${s.project} ${s.harnessName}`.toLowerCase().includes(query))
-    : sessions;
-
-  container.replaceChildren();
-
-  if (shown.length === 0) {
-    container.append(
-      h('div', {
-        class: 'placeholder',
-        text: query ? 'Nothing matches that filter.' : 'No conversations found on this machine.',
-      }),
-    );
-    return;
-  }
-
-  // Group by agent so the list reads as "what did I use", not one long stream.
-  const groups = new Map();
-  for (const session of shown) {
-    const key = session.harnessName || session.harness;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(session);
-  }
-
-  for (const [name, items] of groups) {
-    const section = h('div', { class: 'group' });
-    section.append(
-      h(
-        'div',
-        { class: 'group__head' },
-        h('span', { text: name }),
-        h('span', { class: 'group__count', text: String(items.length) }),
-      ),
-    );
-    for (const session of items) {
-      section.append(
-        h(
-          'button',
-          {
-            class: 'row',
-            type: 'button',
-            'aria-current': String(selectedId === session.id),
-            title: `${session.title}\n${session.project}\n${session.messageCount} messages`,
-            onclick: () => onSelect(session.id),
-          },
-          h('span', { class: 'row__title', text: clamp(session.title, 26) }),
-          h(
-            'span',
-            { class: 'row__meta' },
-            h('span', { text: clamp(session.project, 26) }),
-            !session.quizReady && h('span', { class: 'row__dot', text: '·' }),
-            !session.quizReady && h('span', { text: 'short' }),
-            h('span', { class: 'row__dot', text: '·' }),
-            h('span', { text: timeAgo(session.updated) }),
-          ),
-        ),
-      );
-    }
-    container.append(section);
-  }
 }
