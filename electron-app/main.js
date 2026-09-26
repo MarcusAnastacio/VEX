@@ -36,6 +36,16 @@ function loadLocalEnv() {
 
 const FIXTURES = process.env.COMPAT_FIXTURES === '1';
 
+// The screenshot harness renders with the window hidden. Chromium then treats it as
+// occluded and stops compositing it, and the next capturePage() fails with
+// UnknownVizError - the first frame succeeds, every one after it dies. These switches
+// keep an offscreen window painting. They must be set before the app is ready.
+if (process.env.COMPAT_SCREENSHOT) {
+  app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+  app.commandLine.appendSwitch('disable-renderer-backgrounding');
+  app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
+}
+
 const FRONTEND_DIR = path.join(__dirname, 'frontend');
 
 // The frontend is served from a custom `app://` scheme instead of `file://`.
@@ -121,6 +131,13 @@ async function bootstrap() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // Chromium throttles hidden and occluded windows, and never runs
+      // requestAnimationFrame for one at all - a driver stage that waits on a frame
+      // stalls and hits the harness timeout. Offscreen rendering paints the page
+      // in-process instead, so there is no window to map, raise or focus.
+      ...(process.env.COMPAT_SCREENSHOT
+        ? { offscreen: true, backgroundThrottling: false }
+        : {}),
     },
   });
 
@@ -129,10 +146,13 @@ async function bootstrap() {
   // Shown but not activated: the window appears where it would have anyway, without
   // stealing focus. Deliberately after loadURL so it never flashes an empty frame.
   //
-  // This matters most for the screenshot harness below, which is run constantly by
-  // agents: without it, every verification capture would yank the window to the front
-  // and interrupt whoever is working in another app.
-  mainWindow.showInactive();
+  // Under COMPAT_SCREENSHOT the window is never shown at all. showInactive() is only a
+  // request, and on Wayland the compositor decides: it is free to raise and activate a
+  // newly mapped window regardless. Since the harness is run constantly to check visual
+  // work, that is the single biggest source of focus theft - and unlike the app's own
+  // launch, nobody needs to look at it. A hidden window still composites, so
+  // capturePage() reads the same pixels it would from a shown one.
+  if (!process.env.COMPAT_SCREENSHOT) mainWindow.showInactive();
 
   if (process.env.COMPAT_DEVTOOLS === '1') mainWindow.webContents.openDevTools();
 
