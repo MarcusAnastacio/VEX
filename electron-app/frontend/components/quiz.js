@@ -1,7 +1,7 @@
 // VISUAL LAYER — the quiz: flashcards, the three question types, feedback, and results.
 //
-// Expected to change; the CSS in styles.css was written by the frontend branch and this
-// keeps its class names so that styling still applies.
+// Expected to change; the CSS in styles/quiz.css was written by the frontend branch and
+// this keeps its class names so that styling still applies.
 //
 // What it receives is a STEP from lib/quiz-view.js, never a raw question. It branches on
 // `kind` and on the `status` a result was mapped to, and nothing else.
@@ -23,10 +23,49 @@ const h = (tag, props = {}, ...children) => {
   return node;
 };
 
+/** How each question type is named on screen. One phrase per type, used everywhere. */
+const KIND = {
+  flashcard: 'Flashcard',
+  mcq: 'Multiple choice',
+  cloze: 'Fill in the blank',
+  open: 'Open answer',
+};
+
+/**
+ * The verdict words and the mark each one draws. `feedback--` in the class name and the
+ * copy in the headline both come from the backend, so this only decides which mark and
+ * which tint go with a status.
+ */
+const VERDICT = {
+  correct: { mark: 'correct' },
+  partial: { mark: 'partial' },
+  wrong: { mark: 'wrong' },
+  error: { mark: 'error' },
+};
+
+/**
+ * Every step this session has drawn, keyed by id.
+ *
+ * The results card is handed a summary and a raw attempt, and the attempt only knows
+ * question ids. Remembering the steps as they are rendered is what lets the score
+ * breakdown name the questions it is scoring instead of listing six anonymous ticks.
+ */
+const SEEN = new Map();
+
+/** The score, without a trailing ".0" on a whole number. */
+const formatScore = (n) => {
+  const value = Number(n) || 0;
+  return Number.isInteger(value) ? String(value) : String(Math.round(value * 10) / 10);
+};
+
+/** "Gap 1" from "blank_1", so the code below never has to explain the keys. */
+const gapName = (key, index) => `Gap ${String(key || '').match(/(\d+)/)?.[1] ?? index + 1}`;
+
 /** Render one step into `container`, reporting the response through `onRespond`. */
 export function renderStep(container, { step, result, onRespond = () => {}, onNext, isLast } = {}) {
   container.replaceChildren();
   if (!step) return;
+  if (step.id) SEEN.set(step.id, step);
 
   if (step.kind === 'flashcard') {
     container.append(flashcard(step, { onNext, isLast }));
@@ -34,6 +73,7 @@ export function renderStep(container, { step, result, onRespond = () => {}, onNe
   }
 
   const card = h('section', { class: 'question-card' });
+  card.append(cardHead(step, step.kind === 'cloze' && step.language ? chip(step.language) : null));
 
   if (step.kind === 'mcq') card.append(mcq(step, { result, onRespond, onNext, isLast }));
   else if (step.kind === 'cloze') card.append(cloze(step, { result, onRespond, onNext, isLast }));
@@ -42,40 +82,60 @@ export function renderStep(container, { step, result, onRespond = () => {}, onNe
   container.append(card);
 }
 
+/** The strip at the top of every card: what kind of thing this is, and what it is about. */
+function cardHead(step, extra = null) {
+  return h(
+    'div',
+    { class: 'card-head' },
+    h('span', { class: 'card-head__kind', text: KIND[step.kind] || 'Question' }),
+    step.topicLabel ? h('span', { class: 'card-head__topic', text: step.topicLabel }) : null,
+    extra,
+  );
+}
+
+const chip = (text) => h('span', { class: 'card-head__lang', text });
+
+/** The mark and its label, as one unit, so a narrow card can drop them to a new row. */
+const verdict = (kind, text) =>
+  h('span', { class: 'option__verdict' }, mark(kind), h('span', { class: 'option__note', text }));
+
+/** The primary move forward, shared by the flashcard and by every verdict block. */
+const nextButton = ({ onNext, isLast }) =>
+  h('button', {
+    class: 'btn btn--primary feedback__next',
+    type: 'button',
+    text: isLast ? 'See results' : 'Next question',
+    onclick: onNext,
+  });
+
 // ── Flashcards ─────────────────────────────────────────────────────────────
 
 function flashcard(step, { onNext, isLast }) {
   const card = h('section', { class: 'question-card flashcard' });
-  card.append(h('h3', { text: step.front }));
+  card.append(cardHead(step, h('span', { class: 'card-head__hint', text: 'Answer it before you look' })));
 
-  const back = h('div', { class: 'flashcard__back', hidden: true, text: step.back });
+  const back = h('div', { class: 'flashcard__back', hidden: true }, h('p', { text: step.back }));
   const reveal = h('button', {
-    class: 'btn btn--primary',
+    class: 'btn btn--primary flashcard__reveal',
     type: 'button',
-    text: 'Show answer',
+    text: 'Show the answer',
     onclick: () => {
       back.hidden = false;
+      card.classList.add('flashcard--revealed');
       reveal.remove();
-      card.append(
-        h('button', {
-          class: 'btn btn--primary feedback__next',
-          type: 'button',
-          text: isLast ? 'See results' : 'Next',
-          onclick: onNext,
-        }),
-      );
+      card.append(nextButton({ onNext, isLast }));
     },
   });
 
-  card.append(back, reveal);
+  card.append(h('h3', { class: 'question__prompt', text: step.front }), back, reveal);
   return card;
 }
 
 // ── Multiple choice ────────────────────────────────────────────────────────
 
 function mcq(step, { result, onRespond, onNext, isLast }) {
-  const wrap = h('div');
-  wrap.append(h('h3', { text: step.prompt }));
+  const wrap = h('div', { class: 'q' });
+  wrap.append(h('h3', { class: 'question__prompt', text: step.prompt }));
 
   const options = h('div', { class: 'options' });
   const answered = Boolean(result);
@@ -89,11 +149,20 @@ function mcq(step, { result, onRespond, onNext, isLast }) {
         disabled: answered || undefined,
       },
       h('span', { class: 'option__letter', text: choice.letter }),
-      h('span', { text: choice.label }),
+      h('span', { class: 'option__label', text: choice.label }),
     );
     if (answered) {
-      if (choice.id === step.correctId) button.classList.add('option--correct');
-      else if (choice.id === result?.given) button.classList.add('option--wrong');
+      // The correct option is always marked, whether or not it was the one chosen, so
+      // that a wrong answer still shows what the right one was.
+      if (choice.id === step.correctId) {
+        button.classList.add('option--correct');
+        button.append(verdict('correct', 'Correct answer'));
+      } else if (choice.id === result?.given) {
+        button.classList.add('option--wrong');
+        button.append(verdict('wrong', 'Your answer'));
+      } else {
+        button.classList.add('option--muted');
+      }
     } else {
       button.addEventListener('click', () => onRespond(choice.id));
     }
@@ -108,8 +177,8 @@ function mcq(step, { result, onRespond, onNext, isLast }) {
 // ── Fill in the blanks ─────────────────────────────────────────────────────
 
 function cloze(step, { result, onRespond, onNext, isLast }) {
-  const wrap = h('div');
-  wrap.append(h('h3', { text: step.prompt }));
+  const wrap = h('div', { class: 'q' });
+  wrap.append(h('h3', { class: 'question__prompt', text: step.prompt }));
 
   const inputs = new Map();
   const answered = Boolean(result);
@@ -131,6 +200,7 @@ function cloze(step, { result, onRespond, onNext, isLast }) {
       class: `cloze__blank ${marked ? (marked.correct ? 'cloze__blank--correct' : 'cloze__blank--wrong') : ''}`,
       type: 'text',
       'data-key': key,
+      'aria-label': gapName(key, inputs.size),
       spellcheck: 'false',
       autocomplete: 'off',
       disabled: answered || undefined,
@@ -144,39 +214,60 @@ function cloze(step, { result, onRespond, onNext, isLast }) {
 
   if (!answered) {
     wrap.append(
-      h('button', {
-        class: 'btn btn--primary',
-        type: 'button',
-        text: 'Check answer',
-        onclick: () => {
-          const response = {};
-          for (const [key, field] of inputs) response[key] = field.value;
-          onRespond(response);
-        },
-      }),
+      h('div', { class: 'q__actions' },
+        h('button', {
+          class: 'btn btn--primary',
+          type: 'button',
+          text: 'Check answer',
+          onclick: () => {
+            const response = {};
+            for (const [key, field] of inputs) response[key] = field.value;
+            onRespond(response);
+          },
+        }),
+        h('span', { class: 'q__actions-hint', text: 'Every gap has to be right' }),
+      ),
     );
   } else {
-    if (result?.blanks) {
-      const expected = result.blanks.map((b) => `${b.key} = ${b.expected}`).join(', ');
-      wrap.append(h('p', { class: 'cloze__expected', text: expected }));
-    }
+    if (result?.blanks) wrap.append(blankList(result.blanks));
     wrap.append(feedback(result, { onNext, isLast }));
   }
   return wrap;
 }
 
+/** What went into each gap, and what should have gone in instead. */
+function blankList(blanks) {
+  const list = h('ul', { class: 'blanks' });
+  blanks.forEach((blank, index) => {
+    const given = String(blank.given ?? '').trim();
+    const expected = String(blank.expected ?? '').trim();
+    list.append(
+      h('li', { class: `blanks__row blanks__row--${blank.correct ? 'correct' : 'wrong'}` },
+        mark(blank.correct ? 'correct' : 'wrong'),
+        h('span', { class: 'blanks__key', text: gapName(blank.key, index) }),
+        h('code', { class: 'blanks__value', text: given || 'left blank' }),
+        blank.correct || !expected || expected === given
+          ? null
+          : h('span', { class: 'blanks__expected', text: `expected ${expected}` }),
+      ),
+    );
+  });
+  return list;
+}
+
 // ── Open-ended ─────────────────────────────────────────────────────────────
 
 function open(step, { result, onRespond, onNext, isLast }) {
-  const wrap = h('div');
-  wrap.append(h('h3', { text: step.prompt }));
+  const wrap = h('div', { class: 'q' });
+  wrap.append(h('h3', { class: 'question__prompt', text: step.prompt }));
 
   if (step.rubric?.length) {
     wrap.append(
-      h(
-        'ul',
-        { class: 'rubric' },
-        ...step.rubric.map((criterion) => h('li', { text: criterion.criterion })),
+      h('div', { class: 'rubric' },
+        h('p', { class: 'rubric__label', text: 'A full answer covers' }),
+        h('ul', { class: 'rubric__list' },
+          ...step.rubric.map((criterion) => h('li', { text: criterion.criterion })),
+        ),
       ),
     );
   }
@@ -190,56 +281,82 @@ function open(step, { result, onRespond, onNext, isLast }) {
     });
     wrap.append(
       area,
-      h('button', {
-        class: 'btn btn--primary',
-        type: 'button',
-        text: 'Submit answer',
-        onclick: () => onRespond(area.value),
-      }),
+      h('div', { class: 'q__actions' },
+        h('button', {
+          class: 'btn btn--primary',
+          type: 'button',
+          text: 'Submit answer',
+          onclick: () => onRespond(area.value),
+        }),
+        h('span', { class: 'q__actions-hint', text: 'Graded against the points above' }),
+      ),
     );
     return wrap;
   }
 
-  const feedbackBlock = feedback(result, { onNext, isLast });
+  const extra = [];
   if (result.criteria?.length) {
-    feedbackBlock.append(
-      h(
-        'ul',
-        { class: 'criteria' },
-        ...result.criteria.map((criterion) =>
-          h('li', {
-            text: `${criterion.awarded >= 0.85 ? 'met' : criterion.awarded > 0 ? 'partly met' : 'not met'} ${criterion.criterion}${criterion.comment ? `. ${criterion.comment}` : ''}`,
-          }),
-        ),
+    extra.push(
+      h('ul', { class: 'criteria' },
+        ...result.criteria.map((criterion) => {
+          const met = criterion.awarded >= 0.85 ? 'met' : criterion.awarded > 0 ? 'partly met' : 'not met';
+          return h('li', { class: `criteria__row criteria__row--${met.replace(/\s/g, '-')}` },
+            mark(met === 'met' ? 'correct' : met === 'partly met' ? 'partial' : 'wrong'),
+            h('span', { class: 'criteria__criterion', text: criterion.criterion }),
+            h('span', { class: 'criteria__verdict', text: met }),
+            criterion.comment ? h('span', { class: 'criteria__comment', text: criterion.comment }) : null,
+          );
+        }),
       ),
     );
   }
   if (result.missing?.length) {
-    feedbackBlock.append(h('p', { class: 'criteria__missing', text: `Not mentioned: ${result.missing.join(', ')}` }));
+    extra.push(
+      h('p', { class: 'criteria__missing' },
+        h('strong', { text: 'Not mentioned: ' }),
+        result.missing.join(', '),
+      ),
+    );
   }
-  wrap.append(feedbackBlock);
+  wrap.append(feedback(result, { onNext, isLast, extra }));
   return wrap;
 }
 
 // ── Feedback and results ───────────────────────────────────────────────────
 
-function feedback(result, { onNext, isLast }) {
+/**
+ * A drawn verdict mark.
+ *
+ * The check, the cross and the dash are borders and rotated bars rather than glyphs, so
+ * they never depend on which font happens to carry U+2713. Bundled latin faces usually
+ * do not, and a missing glyph is exactly the kind of silent fallback nobody catches in
+ * a screenshot.
+ */
+function mark(kind) {
+  return h('span', { class: `mark mark--${kind}`, 'aria-hidden': 'true' });
+}
+
+/**
+ * The moment after an answer.
+ *
+ * Status decides the tint and the mark; the headline and the detail are the backend's
+ * words, so the grading rules stay in one place. Anything extra (a per-blank list, the
+ * rubric verdicts) is appended before the button, because the next move is the last
+ * thing on screen.
+ */
+function feedback(result, { onNext, isLast, extra = [] }) {
+  const verdict = VERDICT[result.status] || VERDICT.wrong;
   const block = h(
     'div',
-    { class: `feedback feedback--${result.status}` },
-    h('strong', { text: result.headline }),
+    { class: `feedback feedback--${result.status || 'wrong'}` },
+    mark(verdict.mark),
+    h('div', { class: 'feedback__body' },
+      h('strong', { class: 'feedback__headline', text: result.headline }),
+      result.detail ? h('p', { class: 'feedback__detail', text: result.detail }) : null,
+      ...extra,
+    ),
   );
-  if (result.detail) block.append(h('p', { text: result.detail }));
-  if (onNext) {
-    block.append(
-      h('button', {
-        class: 'btn btn--primary feedback__next',
-        type: 'button',
-        text: isLast ? 'See results' : 'Next question',
-        onclick: onNext,
-      }),
-    );
-  }
+  if (onNext) block.append(nextButton({ onNext, isLast }));
   return block;
 }
 
@@ -253,14 +370,26 @@ function feedback(result, { onNext, isLast }) {
 export function renderResults(container, { summary, attempt, onBack, onRetry } = {}) {
   container.replaceChildren();
   const band = summary?.band;
+  const total = Number(summary?.total ?? 0);
+  const percentage = Math.max(0, Math.min(100, Number(summary?.percentage ?? 0)));
 
   const card = h(
     'section',
     { class: `result-card${band ? ` result-card--${band.tone}` : ''}` },
-    h('div', { class: 'result-card__score', text: `${summary?.score ?? 0} / ${summary?.total ?? 0}` }),
-    h('div', { class: 'result-card__percent', text: `${Math.round(summary?.percentage ?? 0)}%` }),
-    h('h3', { text: band?.headline || 'Quiz complete' }),
-    h('p', { text: summary?.line || '' }),
+    h('div', { class: 'result-card__top' },
+      h('span', { class: 'result-card__eyebrow', text: 'Your score' }),
+      h('span', { class: 'result-card__percent', text: total > 0 ? `${Math.round(percentage)}%` : 'not scored' }),
+    ),
+    h('div', { class: 'result-card__dial' },
+      h('p', { class: 'result-card__score' },
+        h('span', { class: 'result-card__value', text: formatScore(summary?.score) }),
+        h('span', { class: 'result-card__of', text: ` / ${total}` }),
+      ),
+      total > 0 ? meter(percentage) : null,
+    ),
+    h('h3', { class: 'result-card__headline', text: band?.headline || 'Quiz complete' }),
+    summary?.line ? h('p', { class: 'result-card__line', text: summary.line }) : null,
+    breakdown(attempt),
   );
 
   const row = h('div', { class: 'result-card__actions' });
@@ -268,6 +397,49 @@ export function renderResults(container, { summary, attempt, onBack, onRetry } =
   if (onBack) row.append(h('button', { class: 'btn btn--primary', type: 'button', text: 'Back to conversation', onclick: onBack }));
   card.append(row);
   container.append(card);
+}
+
+/** How much of the quiz was earned, as one filled bar. */
+function meter(percentage) {
+  return h('div', { class: 'meter' },
+    h('span', { class: 'meter__fill', style: `width: ${percentage}%` }),
+  );
+}
+
+/**
+ * Which questions were right, by name.
+ *
+ * The attempt carries question ids and a fraction awarded; the prompt comes from the
+ * steps this session drew. A restored quiz that has not been walked through in this
+ * window falls back to the type name rather than showing nothing.
+ */
+function breakdown(attempt) {
+  const rows = attempt?.perQuestion || [];
+  if (!rows.length) return null;
+
+  const list = h('ul', { class: 'breakdown' });
+  const tally = { correct: 0, partial: 0, wrong: 0 };
+  for (const row of rows) {
+    const kind = row.error ? 'error' : Number(row.awarded) >= 0.85 ? 'correct' : Number(row.awarded) > 0 ? 'partial' : 'wrong';
+    tally[kind] += 1;
+    const step = SEEN.get(row.questionId);
+    list.append(
+      h('li', { class: `breakdown__row breakdown__row--${kind}` },
+        mark(kind),
+        h('span', { class: 'breakdown__text', text: step ? step.prompt || step.front || step.topicLabel : KIND[row.type] || 'Question' }),
+        h('span', { class: 'breakdown__kind', text: KIND[step?.kind || row.type] || 'Question' }),
+      ),
+    );
+  }
+
+  const counts = [`${tally.correct} of ${rows.length} right`];
+  if (tally.partial) counts.push(`${tally.partial} partly right`);
+  if (tally.wrong) counts.push(`${tally.wrong} missed`);
+
+  return h('div', { class: 'breakdown-wrap' },
+    h('p', { class: 'breakdown__summary', text: counts.join(' · ') }),
+    list,
+  );
 }
 
 /** The kicker above the title: "QUESTION 2 OF 5". */

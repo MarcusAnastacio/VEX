@@ -7,6 +7,8 @@
 // If you redesign this, keep `renderSidebar(container, props)` and the `onSelect(id)`
 // callback and nothing else in the app has to move.
 
+import { projectLabel } from '../lib/labels.js';
+
 const h = (tag, props = {}, ...children) => {
   const node = document.createElement(tag);
   for (const [key, value] of Object.entries(props)) {
@@ -49,83 +51,6 @@ const timeAgo = (ms) => {
 // otherwise we recover as much of a name as the path allows.
 
 /** Path segments that describe the store layout, never the project. */
-const STORE_SEGMENTS = new Set([
-  'sessions', 'session', 'projects', 'project', 'chats', 'chat',
-  'threads', 'thread', 'tasks', 'task', 'conversations', 'conversation', 'transcripts',
-  'transcript', 'history', 'rollout', 'rollouts', 'logs', 'log', 'state', 'data',
-  'agents', 'agent', 'workspace', 'workspaces', 'workspacestorage', 'globalstorage',
-  'storage', 'main', 'home', 'code', 'dev', 'users', 'user', 'tmp', 'var', 'opt',
-]);
-
-/** Segment names that identify nothing to a reader: ids, timestamps, generated names. */
-const OPAQUE = new RegExp([
-  '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', // uuid
-  '^[0-9a-f]{16,}$', // long hex digest
-  '^[0-9a-f]{8}$', // short hash
-  '^\\d{9,15}$', // epoch millis, or a task directory named by date
-  '^(?:sess|wd|session)[_-]', // generated session folders
-].join('|'), 'i');
-
-/** Filenames every store uses for "the transcript", which say nothing about the project. */
-const STORE_FILES = new RegExp(
-  '^(?:session|transcript|thread|events|updates|wire|messages?|conversation|history|turns|log'
-  + '|api_conversation_history|rollout-.*|.*_history)$',
-  'i',
-);
-
-const FILE_EXT = /\.(jsonl|ndjson|json|sql|sqlite|db|md|log|txt|ya?ml)$/i;
-
-const isStoreSegment = (name) => STORE_SEGMENTS.has(name.toLowerCase()) || OPAQUE.test(name);
-const isStoreFile = (name) => FILE_EXT.test(name);
-
-/**
- * The most human-sounding segment of a path, or '' when there isn't one.
- * Prefers a real cwd, then `project`, then the store path the id was built from.
- */
-export function projectLabel(session = {}) {
-  for (const source of [session.cwd, session.project, session.path]) {
-    const segments = splitPath(source);
-    if (!segments.length) continue;
-    const label = pickSegment(segments);
-    if (label) return label;
-  }
-  return 'Unknown project';
-}
-
-function splitPath(value) {
-  let text = String(value ?? '').trim();
-  if (!text) return [];
-  // Harnesses percent-encode the separator inside a single directory name.
-  try { text = decodeURIComponent(text); } catch { /* keep the raw text */ }
-  return text
-    .split(/[\\/]+/)
-    .map((part) => part.trim().replace(/^['"]|['"]$/g, ''))
-    // Claude Code and friends encode the project as "--workspace-app--".
-    .map((part) => {
-      const wrapped = /^--(.+)--$/.exec(part);
-      return (wrapped ? wrapped[1] : part).replace(/^-+|-+$/g, '');
-    })
-    // Dotfiles are configuration, not a project name.
-    .filter((part) => part && !part.startsWith('.'))
-    .map((name) => ({ name: name.replace(FILE_EXT, ''), file: isStoreFile(name) }));
-}
-
-function pickSegment(segments) {
-  const named = segments.filter((s) => !isStoreSegment(s.name));
-  // Fall back to the raw path rather than giving up: a name like "main" is thin, but it
-  // is still more use than a blank subtitle.
-  const pool = named.length ? named : segments;
-  // A store file never names the project, so prefer a directory that sits above it.
-  const dirs = pool.filter((s) => !s.file);
-  const use = dirs.length ? dirs : pool;
-  const last = use[use.length - 1];
-  if (!last) return '';
-  if (STORE_FILES.test(last.name)) {
-    const above = use[use.length - 2];
-    if (above && !STORE_FILES.test(above.name)) return above.name;
-  }
-  return isStoreSegment(last.name) ? '' : last.name;
-}
 
 /** Everything the filter should match, in one string, lowercased by the caller. */
 const haystack = (session) =>

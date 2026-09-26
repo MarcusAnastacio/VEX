@@ -1,57 +1,133 @@
-/* The conversation pane: empty state, session header, generation settings, staleness
- * strip and the transcript. */
+/* The conversation pane: the landing screen, the session header, the generation
+ * settings, the notice strip and the transcript.
+ *
+ * The states here are the ones a demo spends its time in — nothing selected, quizable,
+ * not quizable, the transcript folded or open, generating, and an error — so each one
+ * is styled as a state rather than left to the browser default.
+ *
+ * Tokens this surface needs are declared here on .main, per the ownership rule that
+ * styles/base.css is frozen: one ring, one radius scale, one spacing rhythm, one
+ * transition, reused by every control in the pane so hover, focus and active read the
+ * same everywhere. */
 
 .main {
+  --p-r-sm: 6px;
+  --p-r: 8px;
+  --p-r-lg: 12px;
+  --p-ring: 0 0 0 2px var(--accent-soft), 0 0 0 1px var(--accent);
+  --p-lift: 0 1px 2px rgba(0, 0, 0, 0.28);
+  --p-t: 120ms;
+  --p-warn: #e8b96a;
   min-width: 0;
   overflow-y: auto;
+  scrollbar-gutter: stable;
 }
+
+/* Defensive: an author `display` beats the user-agent rule for [hidden], and another
+ * surface's stylesheet is allowed to set one. The landing screen must not sit on top of
+ * a selected conversation. */
+.empty[hidden],
+.session[hidden] {
+  display: none;
+}
+
+/* ── Landing: nothing selected ─────────────────────────────────────────────
+ * The markup is fixed by index.html, so the shape comes from here: a mark, a claim,
+ * a sentence, and the three steps as a list rather than a row of chips. */
 .empty {
-  max-width: 420px;
-  padding: 100px 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 460px;
+  padding: 84px 32px 64px;
   margin: 0 auto;
   color: var(--text-dim);
   text-align: center;
 }
+/* A ring with a centre dot: the memory test, drawn rather than imported. */
+.empty::before {
+  content: '';
+  width: 46px;
+  height: 46px;
+  margin-bottom: 22px;
+  border: 1.5px solid var(--border);
+  border-radius: 50%;
+  background: radial-gradient(circle at center, var(--accent-soft) 0 3px, transparent 3.5px);
+  box-shadow: 0 0 0 6px rgba(124, 156, 255, 0.05);
+}
 .empty h2 {
   margin: 0 0 10px;
   color: var(--text);
-  font-size: 17px;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.1px;
+  line-height: 1.3;
 }
 .empty p {
+  max-width: 40ch;
   margin: 0;
   font-size: 13px;
   line-height: 1.65;
 }
 .empty__eyebrow {
+  order: -1;
+  margin-bottom: 14px;
   color: var(--accent);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 1.4px;
-  margin-bottom: 12px;
+}
+.empty__eyebrow + h2 {
+  margin-top: 0;
 }
 .empty__steps {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-  margin-top: 26px;
-  color: var(--text-faint);
-  font-size: 10px;
+  flex-direction: column;
+  width: 100%;
+  margin-top: 28px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--p-r-lg);
+  background: var(--bg-raised);
+  overflow: hidden;
+  text-align: left;
 }
 .empty__steps span {
-  padding: 5px 8px;
-  background: var(--bg-raised);
-  border: 1px solid var(--border-soft);
-  border-radius: 5px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 11px 14px;
+  color: var(--text-faint);
+  font-size: 11.5px;
+  font-weight: 600;
 }
-.session {
-  max-width: 860px;
-  padding: 0 32px 48px;
-  margin: 0 auto;
+.empty__steps span + span {
+  border-top: 1px solid var(--border-soft);
 }
+.empty__steps span::after {
+  content: '';
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: 10.5px;
+  font-weight: 400;
+  opacity: 0.7;
+}
+.empty__steps span:nth-child(1)::after {
+  content: 'on the left';
+}
+.empty__steps span:nth-child(2)::after {
+  content: 'before you generate';
+}
+.empty__steps span:nth-child(3)::after {
+  content: 'one topic at a time';
+}
+
+/* ── Session header ────────────────────────────────────────────────────────
+ * Sticky, because the transcript below it is long and the two buttons in it are the
+ * only way out of this pane. */
+.session,
 .payload {
   max-width: 860px;
-  padding: 0 32px 48px;
+  padding: 10px 32px 56px;
   margin: 0 auto;
 }
 .session__head {
@@ -62,7 +138,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  padding: 20px 0 14px;
+  padding: 18px 0 14px;
   background: var(--bg);
   border-bottom: 1px solid var(--border-soft);
 }
@@ -72,7 +148,7 @@
 .session__title {
   margin: 0;
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
@@ -80,65 +156,739 @@
   margin: 5px 0 0;
   color: var(--text-faint);
   font-size: 11.5px;
+  line-height: 1.5;
   overflow-wrap: anywhere;
 }
 .session__actions {
   display: flex;
   flex-shrink: 0;
-  gap: 6px;
+  gap: 8px;
 }
 .session__messages {
-  padding-top: 18px;
+  padding-top: 4px;
 }
+
+/* ── The settings card ─────────────────────────────────────────────────────
+ * index.html owns the card; this owns everything inside it. One column of labelled
+ * blocks, because a settings pane people read once should be a list, not a grid. */
 .prompt-card {
-  padding: 14px;
+  padding: 0;
   margin-top: 18px;
-  background: linear-gradient(135deg, var(--accent-soft), var(--bg-raised));
-  border: 1px solid rgba(124, 156, 255, 0.32);
-  border-radius: var(--radius);
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--p-r-lg);
+  box-shadow: var(--p-lift);
+  overflow: hidden;
 }
-.prompt-card label {
-  display: block;
-  margin-bottom: 7px;
+.settings {
+  display: flex;
+  flex-direction: column;
+}
+.settings__block {
+  padding: 14px 16px;
+}
+.settings__block + .settings__block,
+.settings__plan {
+  border-top: 1px solid var(--border-soft);
+}
+.settings__labelrow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 9px;
+}
+.settings__label {
   color: var(--text);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
 }
-.prompt-card textarea {
+.settings__labelhint {
+  color: var(--text-faint);
+  font-size: 11px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.settings__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.settings__row--types {
+  gap: 8px;
+}
+.settings__hint {
+  color: var(--text-faint);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.settings__row .settings__hint {
+  flex: 1 1 220px;
+}
+
+/* Number + stepper. The native input is kept for the keyboard and for the spinner
+ * affordance it already has; the buttons are the ones a mouse reaches for. */
+.stepper {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: var(--p-r);
+  background: var(--bg);
+  overflow: hidden;
+  transition: border-color var(--p-t) ease;
+}
+.stepper:hover {
+  border-color: #333a49;
+}
+.stepper:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--p-ring);
+}
+.stepper__btn {
+  width: 28px;
+  padding: 0;
+  color: var(--text-dim);
+  background: transparent;
+  border: 0;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--p-t) ease, color var(--p-t) ease;
+}
+.stepper__btn:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+.stepper__btn:active:not(:disabled) {
+  background: var(--bg-active);
+}
+.stepper__btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.settings__count {
+  width: 52px;
+  padding: 6px 4px;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-right: 1px solid var(--border-soft);
+  border-left: 1px solid var(--border-soft);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  outline: none;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.settings__count::-webkit-inner-spin-button,
+.settings__count::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
+/* Type toggles: real checkboxes for the keyboard, chips for the eye. */
+.settings__type {
+  position: relative;
+  display: inline-flex;
+  cursor: pointer;
+}
+.settings__type input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.settings__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 11px;
+  color: var(--text-dim);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--p-r);
+  font-size: 12px;
+  transition: background var(--p-t) ease, border-color var(--p-t) ease, color var(--p-t) ease;
+}
+.settings__type:hover .settings__chip {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+.settings__type input:checked + .settings__chip {
+  color: var(--text);
+  background: var(--accent-soft);
+  border-color: rgba(124, 156, 255, 0.42);
+}
+.settings__type input:focus-visible + .settings__chip {
+  border-color: var(--accent);
+  box-shadow: var(--p-ring);
+}
+.settings__type input:disabled + .settings__chip {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.settings__tick {
+  display: none;
+  color: var(--accent);
+  font-size: 11px;
+}
+.settings__type input:checked + .settings__chip .settings__tick {
+  display: inline;
+}
+.settings__flag {
+  padding: 1px 5px;
+  color: var(--text-faint);
+  background: var(--bg-hover);
+  border-radius: 4px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+/* Focus */
+.settings__focus {
   display: block;
   width: 100%;
-  padding: 9px 10px;
+  padding: 9px 11px;
   color: var(--text);
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--p-r);
   font: inherit;
-  font-size: 12px;
+  font-size: 12.5px;
+  line-height: 1.5;
   outline: none;
   resize: vertical;
+  transition: border-color var(--p-t) ease, box-shadow var(--p-t) ease;
 }
-.prompt-card textarea:focus {
+.settings__focus::placeholder {
+  color: var(--text-faint);
+}
+.settings__focus:hover:not(:disabled) {
+  border-color: #333a49;
+}
+.settings__focus:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-soft);
+  box-shadow: var(--p-ring);
 }
+.settings__focus:disabled {
+  opacity: 0.55;
+}
+.settings__counter {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* What the settings add up to */
+.settings__plan {
+  padding: 14px 16px;
+  background: rgba(124, 156, 255, 0.04);
+}
+.settings__plan .settings__labelrow {
+  margin-bottom: 8px;
+}
+.settings__plan .settings__hint {
+  margin-left: auto;
+  text-align: right;
+}
+.settings__topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.chip {
+  max-width: 340px;
+  padding: 3px 9px;
+  color: var(--text-dim);
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chip--more {
+  color: var(--text-faint);
+  border-style: dashed;
+}
+/* Informational, not a warning: amber in this pane means "this cannot be quizzed". */
+.settings__notice {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.settings__notice strong {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.settings__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 16px;
+  border-top: 1px solid var(--border-soft);
+  background: rgba(0, 0, 0, 0.14);
+}
+.settings__go {
+  padding: 7px 14px;
+  font-size: 12px;
+}
+.settings__actions .settings__hint {
+  flex: 1 1 200px;
+}
+/* index.html owns this footnote; it is the last thing in the card, under the button,
+ * which is where a line about redaction belongs. */
 .prompt-card__foot {
   display: flex;
   justify-content: space-between;
   gap: 10px;
-  margin-top: 7px;
+  padding: 10px 16px;
   color: var(--text-faint);
-  font-size: 10px;
+  background: rgba(0, 0, 0, 0.14);
+  border-top: 1px solid var(--border-soft);
+  font-size: 10.5px;
+  line-height: 1.4;
 }
+
+/* ── Cannot carry a quiz ─────────────────────────────────────────────────
+ * The dead end, written as an explanation. Grey on amber, no red: nothing has
+ * failed, the conversation is simply too small. */
+.blocked {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 15px 16px;
+  background: rgba(232, 185, 106, 0.07);
+  border-bottom: 1px solid rgba(232, 185, 106, 0.24);
+}
+.blocked__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+}
+.blocked__mark {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border: 1.5px solid var(--p-warn);
+  border-radius: 50%;
+  position: relative;
+}
+.blocked__mark::after {
+  content: '';
+  position: absolute;
+  top: 7px;
+  left: 3px;
+  width: 9px;
+  height: 1.5px;
+  background: var(--p-warn);
+  border-radius: 1px;
+}
+.blocked__titles {
+  min-width: 0;
+}
+.blocked__title {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.blocked__sub {
+  margin: 3px 0 0;
+  color: var(--text-dim);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.blocked__reasons {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0 0 0 29px;
+  list-style: none;
+}
+.blocked__reasons li {
+  position: relative;
+  color: var(--text-dim);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.blocked__reasons li::before {
+  content: '';
+  position: absolute;
+  top: 7px;
+  left: -14px;
+  width: 4px;
+  height: 4px;
+  background: var(--p-warn);
+  border-radius: 50%;
+  opacity: 0.7;
+}
+.blocked__next {
+  margin: 0;
+  padding-left: 29px;
+  color: var(--text-faint);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+/* ── Working ──────────────────────────────────────────────────────────────
+ * A generation takes a minute. The pane says so, and says what it is doing, rather
+ * than sitting there as a card with a disabled button in it. */
+.busy {
+  padding: 15px 16px;
+  background: rgba(124, 156, 255, 0.05);
+  border-top: 1px solid var(--border-soft);
+}
+.busy__head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 10px;
+}
+.busy__title {
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.busy__spinner {
+  width: 13px;
+  height: 13px;
+  border: 1.5px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: p-spin 900ms linear infinite;
+}
+.busy__bar {
+  height: 3px;
+  background: var(--bg);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.busy__fill {
+  display: block;
+  width: 34%;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  animation: p-sweep 1500ms ease-in-out infinite;
+}
+.busy__body {
+  margin: 9px 0 0;
+  color: var(--text-dim);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+@keyframes p-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes p-sweep {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+/* One spinner everywhere, so it is never left turning over a pane that has moved on. */
+@media (prefers-reduced-motion: reduce) {
+  .busy__spinner,
+  .busy__fill {
+    animation: none;
+  }
+}
+
+/* ── Notices and staleness ─────────────────────────────────────────────────
+ * Errors are red because something failed. Everything else is accent on a dark
+ * wash: worth a look, not worth alarm. */
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 12px 13px;
+  margin: 0 0 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--p-r-lg);
+  background: var(--bg-raised);
+  font-size: 12px;
+}
+.notice--error {
+  border-color: rgba(226, 106, 106, 0.4);
+  background: rgba(226, 106, 106, 0.08);
+}
+.notice__mark {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  border: 1.5px solid var(--text-faint);
+  border-radius: 50%;
+  position: relative;
+}
+.notice--error .notice__mark {
+  border-color: #e26a6a;
+}
+.notice__mark::after {
+  content: '';
+  position: absolute;
+  top: 6.5px;
+  left: 3px;
+  width: 7px;
+  height: 1.5px;
+  background: var(--text-faint);
+  border-radius: 1px;
+}
+.notice--error .notice__mark::after {
+  background: #e26a6a;
+}
+.notice__body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.notice__title {
+  margin: 0;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.notice__text,
+.notice__hint {
+  margin: 3px 0 0;
+  color: var(--text-dim);
+  font-size: 11.5px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.notice__hint {
+  color: var(--text-faint);
+}
+.notice__close {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  color: var(--text-faint);
+  background: transparent;
+  border: 0;
+  border-radius: var(--p-r-sm);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--p-t) ease, color var(--p-t) ease;
+}
+.notice__close:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+.notice__close:focus-visible {
+  outline: none;
+  box-shadow: var(--p-ring);
+}
+
+.stale {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 11px;
+  align-items: start;
+  padding: 12px 13px;
+  margin: 14px 0 0;
+  background: rgba(124, 156, 255, 0.07);
+  border: 1px solid rgba(124, 156, 255, 0.26);
+  border-radius: var(--p-r-lg);
+  font-size: 12px;
+}
+.stale--diverged,
+.stale--settings_changed,
+.stale--generator_stale {
+  background: rgba(232, 185, 106, 0.07);
+  border-color: rgba(232, 185, 106, 0.26);
+}
+.stale__mark {
+  grid-row: span 1;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  border: 1.5px solid var(--accent);
+  border-radius: 50%;
+  position: relative;
+}
+.stale--diverged .stale__mark,
+.stale--settings_changed .stale__mark,
+.stale--generator_stale .stale__mark {
+  border-color: var(--p-warn);
+}
+/* An exclamation, drawn: a bar and a dot. */
+.stale__mark::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 6.2px;
+  width: 1.5px;
+  height: 6px;
+  background: var(--accent);
+  border-radius: 1px;
+  box-shadow: 0 7.5px 0 0 var(--accent);
+}
+.stale--diverged .stale__mark::after,
+.stale--settings_changed .stale__mark::after,
+.stale--generator_stale .stale__mark::after {
+  background: var(--p-warn);
+  box-shadow: 0 7.5px 0 0 var(--p-warn);
+}
+.stale__text {
+  min-width: 0;
+}
+.stale__title {
+  margin: 0;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.stale__body {
+  margin: 2px 0 0;
+  color: var(--text-dim);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.stale__actions {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+.stale__actions .btn {
+  padding: 5px 10px;
+  font-size: 11.5px;
+}
+.stale__note {
+  grid-column: 2;
+  margin: 2px 0 0;
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/* ── Transcript ───────────────────────────────────────────────────────────
+ * A long transcript pushed the settings off the screen, so the pane has a bar
+ * that says how much is in here and folds it away. */
+.transcript__bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 0 10px;
+  margin-top: 14px;
+  border-top: 1px solid var(--border-soft);
+}
+.transcript__meta {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  min-width: 0;
+}
+.transcript__title {
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.transcript__stat {
+  color: var(--text-faint);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.transcript__toggle {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 4px 9px;
+  font-size: 11px;
+}
+.transcript__toggle:hover {
+  color: var(--text);
+  border-color: #333a49;
+}
+.transcript__toggle:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--p-ring);
+}
+.transcript__summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--p-r-lg);
+}
+.transcript__summarytext {
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.transcript__reveal {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 5px 11px;
+  color: var(--text);
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: var(--p-r);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--p-t) ease, border-color var(--p-t) ease;
+}
+.transcript__reveal:hover {
+  background: var(--bg-active);
+  border-color: #333a49;
+}
+.transcript__reveal:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--p-ring);
+}
+
 .msg {
-  margin-bottom: 18px;
+  margin-bottom: 12px;
+  border-radius: var(--p-r-lg);
+  transition: background var(--p-t) ease;
+}
+.msg:hover {
+  background: rgba(255, 255, 255, 0.012);
 }
 .msg__head {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 5px;
-  font-size: 11px;
-  font-weight: 600;
+  padding: 0 2px 5px;
+  color: var(--text-faint);
+  font-size: 10.5px;
+  font-weight: 700;
   letter-spacing: 0.5px;
   text-transform: uppercase;
 }
@@ -148,11 +898,14 @@
 .msg--assistant .msg__role {
   color: var(--assistant);
 }
-.msg--system .msg__role {
+.msg__index {
+  margin-left: auto;
   color: var(--text-faint);
-}
-.msg--tool .msg__role {
-  color: var(--text-faint);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
 }
 .msg__tools {
   padding: 1px 6px;
@@ -165,11 +918,13 @@
   text-transform: none;
 }
 .msg__body {
+  max-width: 680px;
   padding: 10px 13px;
+  color: var(--text-dim);
   background: var(--bg-raised);
   border: 1px solid var(--border-soft);
   border-left: 2px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--p-r);
   font-size: 12.5px;
   line-height: 1.6;
   overflow-wrap: anywhere;
@@ -181,91 +936,76 @@
 .msg--assistant .msg__body {
   border-left-color: var(--assistant);
 }
+
+/* ── Payload ─────────────────────────────────────────────────────────────
+ * A <pre> with the redaction report as its first lines, so the "what leaves this
+ * machine" story reads top to bottom before the JSON does. */
 .payload__json {
-  padding: 14px;
-  margin: 18px 0 0;
-  overflow-x: auto;
+  max-width: 860px;
+  padding: 16px;
+  margin: 18px auto 56px;
+  color: var(--text-dim);
   background: var(--bg-raised);
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--p-r-lg);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
-  line-height: 1.55;
+  font-size: 11.5px;
+  line-height: 1.6;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  overflow-x: auto;
 }
-.settings {
-  display: grid;
-  gap: 10px;
-}
-.settings__row {
+.redaction {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 0 0 12px;
+  font-family: 'Nunito', sans-serif;
+  white-space: normal;
 }
-.settings__row--types {
-  gap: 14px;
+.redaction__mark {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  background: var(--p-warn);
+  border-radius: 3px;
+  opacity: 0.85;
 }
-.settings__label {
+.redaction__text {
   color: var(--text-dim);
   font-size: 11.5px;
+  line-height: 1.55;
 }
-.settings__count {
-  width: 68px;
-  padding: 5px 8px;
+.redaction__text strong {
   color: var(--text);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  font: inherit;
-  font-size: 12px;
 }
-.settings__hint {
+.payload__divider {
+  display: block;
+  margin: 0 0 12px;
+  padding-bottom: 10px;
   color: var(--text-faint);
-  font-size: 11px;
+  border-bottom: 1px solid var(--border-soft);
+  font-family: 'Nunito', sans-serif;
+  font-size: 10.5px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  white-space: normal;
 }
-.settings__type {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  cursor: pointer;
-}
-.settings__flag {
-  padding: 1px 6px;
-  color: var(--text-faint);
-  background: var(--bg-hover);
-  border-radius: 4px;
-  font-size: 9.5px;
-}
-.settings__notice {
-  margin: 0;
-  color: var(--text-dim);
-  font-size: 11.5px;
-}
-.settings__notice--warn {
-  color: #e8b96a;
-}
-.stale {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  margin: 0 0 14px;
-  background: rgba(124, 156, 255, 0.08);
-  border: 1px solid rgba(124, 156, 255, 0.28);
-  border-radius: 8px;
-  font-size: 12px;
-}
+
+/* ── Narrow ───────────────────────────────────────────────────────────────
+ * The window has a 900px floor, so this only bites on a small display or a
+ * narrow split. Everything stays on the same left edge, and the actions wrap
+ * under the title rather than squeezing it. */
 @media (max-width: 760px) {
-  .session {
+  .session,
+  .payload {
     padding-right: 20px;
     padding-left: 20px;
   }
   .session__head {
     flex-direction: column;
+    gap: 12px;
   }
   .session__actions {
     width: 100%;
@@ -273,5 +1013,86 @@
   .session__actions .btn {
     flex: 1;
   }
+  .empty {
+    padding: 48px 20px 40px;
+  }
+  .settings__actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .settings__go {
+    width: 100%;
+  }
+  .settings__plan .settings__hint {
+    margin-left: 0;
+    text-align: left;
+  }
+  .settings__labelrow {
+    flex-wrap: wrap;
+  }
+  .transcript__bar {
+    flex-wrap: wrap;
+  }
+  .transcript__meta {
+    flex-wrap: wrap;
+    gap: 4px 9px;
+  }
+  .transcript__toggle {
+    margin-left: 0;
+  }
+  .transcript__stat {
+    white-space: normal;
+  }
+  .stale {
+    grid-template-columns: 1fr;
+  }
+  .stale__actions,
+  .stale__note {
+    grid-column: 1;
+  }
+  .stale__actions .btn {
+    width: 100%;
+  }
+  .msg__body {
+    font-size: 13px;
+  }
 }
 
+/* A phone-width column, if it ever gets one: the header is sticky, so an unbounded
+ * title and subtitle would eat the whole viewport before the settings card appeared. */
+@media (max-width: 560px) {
+  .session__title,
+  .session__sub {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    -webkit-line-clamp: 2;
+  }
+  .session__head {
+    padding-top: 14px;
+  }
+  .empty {
+    padding: 36px 16px 32px;
+  }
+  .empty::before {
+    width: 36px;
+    height: 36px;
+    margin-bottom: 16px;
+  }
+  .settings__block,
+  .settings__plan,
+  .settings__actions,
+  .blocked,
+  .busy,
+  .prompt-card__foot {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+  .blocked__reasons,
+  .blocked__next {
+    padding-left: 0;
+  }
+  .blocked__reasons li::before {
+    display: none;
+  }
+}
