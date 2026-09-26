@@ -176,7 +176,20 @@ async function bootstrap() {
         }
 
         for (const stage of stages) {
-          if (stage.code) await mainWindow.webContents.executeJavaScript(stage.code, true);
+          const label = stage.name || '(initial)';
+          let result;
+          if (stage.code) result = await mainWindow.webContents.executeJavaScript(stage.code, true);
+          // Log what the stage returned. A probe that checks a value should not have to
+          // render its finding into the page and then be read back by eye from a PNG.
+          if (result !== undefined) {
+            let shown;
+            try {
+              shown = JSON.stringify(result);
+            } catch {
+              shown = String(result);
+            }
+            console.log(`[screenshot] stage ${label} -> ${String(shown).slice(0, 800)}`);
+          }
           const image = await mainWindow.webContents.capturePage();
           const out = stage.name ? shotPath.replace(/\.png$/, `-${stage.name}.png`) : shotPath;
           fs.writeFileSync(out, image.toPNG());
