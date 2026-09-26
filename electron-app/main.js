@@ -113,6 +113,9 @@ async function bootstrap() {
     minHeight: 600,
     backgroundColor: '#12141a',
     title: 'Agent Quiz',
+    // Created hidden, then shown with showInactive() below, so launching the app does not
+    // pull focus away from whatever the user is actually typing in.
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -122,6 +125,14 @@ async function bootstrap() {
   });
 
   await mainWindow.loadURL(`${APP_ORIGIN}/index.html`);
+
+  // Shown but not activated: the window appears where it would have anyway, without
+  // stealing focus. Deliberately after loadURL so it never flashes an empty frame.
+  //
+  // This matters most for the screenshot harness below, which is run constantly by
+  // agents: without it, every verification capture would yank the window to the front
+  // and interrupt whoever is working in another app.
+  mainWindow.showInactive();
 
   if (process.env.COMPAT_DEVTOOLS === '1') mainWindow.webContents.openDevTools();
 
