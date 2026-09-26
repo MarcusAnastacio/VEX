@@ -102,8 +102,12 @@ function render() {
     el.generate.textContent = s.busy ? 'Generating…' : s.button?.label || 'Generate quiz';
   }
 
+  // An empty progress has to clear the element. The scan failure path has nothing truthful to
+  // put here, and without this the footer keeps whatever it last said, so a failed rescan
+  // left "Scanning…" on screen forever.
   if (s.busy && s.progress) el.progress.textContent = s.progress;
   else if (!s.busy && s.progress && s.stage !== 'quiz') el.progress.textContent = s.progress;
+  else el.progress.textContent = '';
 }
 
 // ── Actions ────────────────────────────────────────────────────────────────
@@ -124,7 +128,11 @@ async function rescan(options) {
       storeInfo: await api.storeInfo(),
     });
   } catch (err) {
-    store.set({ busy: false, notice: { level: 'error', text: String(err?.message || err) } });
+    store.set({
+      busy: false,
+      progress: '',
+      notice: { level: 'error', text: String(err?.message || err) },
+    });
   }
 }
 
