@@ -259,6 +259,10 @@ export class CompatibilityLayer extends EventEmitter {
         nativeId: s.nativeId,
         title: s.title,
         project: s.project,
+        // Carried into the sidebar summary because the label derived from the store path is
+        // often junk: a flat fixture directory yields "claude-code/session.jsonl", where the
+        // transcript's own cwd gives "checkout-api". Only the full session had this before.
+        cwd: s.cwd,
         updated: s.updated,
         started: s.started,
         messageCount: s.messages.length,
