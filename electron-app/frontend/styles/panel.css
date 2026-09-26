@@ -1,0 +1,277 @@
+/* The conversation pane: empty state, session header, generation settings, staleness
+ * strip and the transcript. */
+
+.main {
+  min-width: 0;
+  overflow-y: auto;
+}
+.empty {
+  max-width: 420px;
+  padding: 100px 40px;
+  margin: 0 auto;
+  color: var(--text-dim);
+  text-align: center;
+}
+.empty h2 {
+  margin: 0 0 10px;
+  color: var(--text);
+  font-size: 17px;
+}
+.empty p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.65;
+}
+.empty__eyebrow {
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  margin-bottom: 12px;
+}
+.empty__steps {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 26px;
+  color: var(--text-faint);
+  font-size: 10px;
+}
+.empty__steps span {
+  padding: 5px 8px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: 5px;
+}
+.session {
+  max-width: 860px;
+  padding: 0 32px 48px;
+  margin: 0 auto;
+}
+.payload {
+  max-width: 860px;
+  padding: 0 32px 48px;
+  margin: 0 auto;
+}
+.session__head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 0 14px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border-soft);
+}
+.session__titles {
+  min-width: 0;
+}
+.session__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.session__sub {
+  margin: 5px 0 0;
+  color: var(--text-faint);
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}
+.session__actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
+}
+.session__messages {
+  padding-top: 18px;
+}
+.prompt-card {
+  padding: 14px;
+  margin-top: 18px;
+  background: linear-gradient(135deg, var(--accent-soft), var(--bg-raised));
+  border: 1px solid rgba(124, 156, 255, 0.32);
+  border-radius: var(--radius);
+}
+.prompt-card label {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+.prompt-card textarea {
+  display: block;
+  width: 100%;
+  padding: 9px 10px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+  resize: vertical;
+}
+.prompt-card textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+.prompt-card__foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 7px;
+  color: var(--text-faint);
+  font-size: 10px;
+}
+.msg {
+  margin-bottom: 18px;
+}
+.msg__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.msg--user .msg__role {
+  color: var(--user);
+}
+.msg--assistant .msg__role {
+  color: var(--assistant);
+}
+.msg--system .msg__role {
+  color: var(--text-faint);
+}
+.msg--tool .msg__role {
+  color: var(--text-faint);
+}
+.msg__tools {
+  padding: 1px 6px;
+  color: var(--text-faint);
+  background: var(--bg-hover);
+  border-radius: 4px;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  text-transform: none;
+}
+.msg__body {
+  padding: 10px 13px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-soft);
+  border-left: 2px solid var(--border);
+  border-radius: 8px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.msg--user .msg__body {
+  border-left-color: var(--user);
+}
+.msg--assistant .msg__body {
+  border-left-color: var(--assistant);
+}
+.payload__json {
+  padding: 14px;
+  margin: 18px 0 0;
+  overflow-x: auto;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.settings {
+  display: grid;
+  gap: 10px;
+}
+.settings__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.settings__row--types {
+  gap: 14px;
+}
+.settings__label {
+  color: var(--text-dim);
+  font-size: 11.5px;
+}
+.settings__count {
+  width: 68px;
+  padding: 5px 8px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font: inherit;
+  font-size: 12px;
+}
+.settings__hint {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+.settings__type {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.settings__flag {
+  padding: 1px 6px;
+  color: var(--text-faint);
+  background: var(--bg-hover);
+  border-radius: 4px;
+  font-size: 9.5px;
+}
+.settings__notice {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 11.5px;
+}
+.settings__notice--warn {
+  color: #e8b96a;
+}
+.stale {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  margin: 0 0 14px;
+  background: rgba(124, 156, 255, 0.08);
+  border: 1px solid rgba(124, 156, 255, 0.28);
+  border-radius: 8px;
+  font-size: 12px;
+}
+@media (max-width: 760px) {
+  .session {
+    padding-right: 20px;
+    padding-left: 20px;
+  }
+  .session__head {
+    flex-direction: column;
+  }
+  .session__actions {
+    width: 100%;
+  }
+  .session__actions .btn {
+    flex: 1;
+  }
+}
+

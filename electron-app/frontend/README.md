@@ -31,7 +31,11 @@ npm test --prefix frontend         # the contract test (see below)
 ```
 frontend/
 ├── index.html          markup and the CSP
-├── styles.css          all styling, design tokens in :root at the top
+├── styles/             one stylesheet per surface, so restyles cannot collide
+│   ├── base.css          tokens, font, reset, shared .btn   (FROZEN, loaded first)
+│   ├── sidebar.css       the conversation list
+│   ├── panel.css         empty state, session header, settings, staleness, transcript
+│   └── quiz.css          flashcards, question types, feedback, results
 ├── fonts/              Nunito, bundled. See Type below.
 ├── app.js              WIRING: reads state, calls the API, tells components what to draw
 ├── lib/                FUNCTIONAL. Finalised. Restyling should not need to touch it.
@@ -43,6 +47,26 @@ frontend/
     ├── panel.js          empty state, transcript, settings, payload
     └── quiz.js           flashcards, the three question types, feedback, results
 ```
+
+### Ownership
+
+Each surface owns exactly two files: a component and a stylesheet.
+
+| Surface | Owns |
+|---|---|
+| sidebar | `components/sidebar.js`, `styles/sidebar.css` |
+| panel | `components/panel.js`, `styles/panel.css` |
+| quiz | `components/quiz.js`, `styles/quiz.css` |
+
+Three rules keep this safe:
+
+- **`styles/base.css` is frozen.** Add a component's custom properties to that component's
+  own stylesheet, so two surfaces can never both want to edit the same block.
+- **Selector sets are disjoint.** The stylesheets were split so no selector appears in two
+  files, which is why load order above `base.css` does not matter.
+- **`.session__head`, `.session__title` and `.session__sub` are panel-owned**, even though
+  the quiz pane uses them for its own header. Style a quiz-specific override in
+  `quiz.css` instead of editing `panel.css`.
 
 The rules that keep the seam intact:
 
@@ -104,6 +128,26 @@ Two things worth knowing:
   completion overwrites the score rather than accumulating attempts.
 
 ---
+
+## Seeing what you changed
+
+The app renders headlessly to a PNG, which is the only way to check visual work without a
+human clicking. Two environment variables drive it:
+
+```bash
+# just the landing screen
+COMPAT_SCREENSHOT=/tmp/shot.png npm start
+
+# walk the whole flow: /tmp/drive.js returns [{ name, code }] stages, each captured
+# to /tmp/shot-<name>.png. The drive file runs IN THE RENDERER.
+COMPAT_FIXTURES=1 COMPAT_SCREENSHOT=/tmp/shot.png COMPAT_DRIVE=/tmp/drive.js npm start
+```
+
+Run it with `COMPAT_FIXTURES=1` when you want a stable, offline screen to compare against,
+and without it to check real history. A drive stage's `code` may be async; it is awaited
+before the capture. Always check the terminal for `[screenshot] failed:` and
+`net::ERR_FILE_NOT_FOUND` — a missing asset produces a *blank or fallback-font* render
+rather than an error on screen, which is exactly how the font silently reverted once.
 
 ## The contract test
 

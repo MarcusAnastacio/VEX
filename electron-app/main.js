@@ -127,18 +127,54 @@ async function bootstrap() {
 
   // Headless verification: COMPAT_SCREENSHOT=/tmp/out.png renders the window to a
   // PNG and exits. Used to check the UI in CI or from a terminal without a display.
+  //
+  // COMPAT_DRIVE=/path/to/drive.js additionally drives the UI before capturing, so the
+  // quiz and results screens are reachable without a human clicking. The drive file runs
+  // IN THE RENDERER and must evaluate to an array of stages:
+  //
+  //     [{ name: '02-quiz', code: "document.querySelector('#generate').click()" }]
+  //
+  // Each stage's `code` runs, then the window is captured to `<shot>-<name>.png`. Stage
+  // code may return a promise, which is awaited. A stage with `code: null` just captures
+  // the current state.
+  //
+  // Why this exists: an agent asked to make a screen look better cannot judge its own work
+  // without seeing the screen. Before this, only the initial empty state was reachable, so
+  // visual work had to be reviewed by hand. This is the feedback loop that makes the
+  // visual layer delegable.
   const shotPath = process.env.COMPAT_SCREENSHOT;
   if (shotPath) {
-    const fs = require('node:fs');
+    const drivePath = process.env.COMPAT_DRIVE;
     const waitMs = Number(process.env.COMPAT_SCREENSHOT_DELAY || 4000);
+
+    // A hard deadline, always. A drive script that throws must still exit the process,
+    // otherwise the run looks like a hang rather than a failed assertion.
+    const hardExit = setTimeout(() => {
+      console.error('[screenshot] hard timeout, exiting');
+      app.exit(1);
+    }, waitMs + 60_000);
+
     setTimeout(async () => {
       try {
-        const image = await mainWindow.webContents.capturePage();
-        fs.writeFileSync(shotPath, image.toPNG());
-        console.log(`[screenshot] wrote ${shotPath}`);
+        let stages = [{ name: '', code: null }];
+        if (drivePath) {
+          const source = fs.readFileSync(drivePath, 'utf8');
+          stages = await mainWindow.webContents.executeJavaScript(source, true);
+          if (!Array.isArray(stages)) throw new Error(`drive file ${drivePath} did not return an array of stages`);
+          console.log(`[screenshot] ${stages.length} stage(s) from ${drivePath}`);
+        }
+
+        for (const stage of stages) {
+          if (stage.code) await mainWindow.webContents.executeJavaScript(stage.code, true);
+          const image = await mainWindow.webContents.capturePage();
+          const out = stage.name ? shotPath.replace(/\.png$/, `-${stage.name}.png`) : shotPath;
+          fs.writeFileSync(out, image.toPNG());
+          console.log(`[screenshot] wrote ${out}`);
+        }
       } catch (err) {
-        console.error('[screenshot] failed:', err);
+        console.error('[screenshot] failed:', err?.message || err);
       }
+      clearTimeout(hardExit);
       app.exit(0);
     }, waitMs);
   }

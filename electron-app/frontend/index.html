@@ -8,7 +8,13 @@
       content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self';"
     />
     <title>Agent Quiz</title>
-    <link rel="stylesheet" href="styles.css" />
+    <!-- One stylesheet per surface, so a restyle of one screen cannot collide with
+         another. Load order is base first; the surfaces have disjoint selectors, so
+         their relative order does not matter. See frontend/README.md. -->
+    <link rel="stylesheet" href="styles/base.css" />
+    <link rel="stylesheet" href="styles/sidebar.css" />
+    <link rel="stylesheet" href="styles/panel.css" />
+    <link rel="stylesheet" href="styles/quiz.css" />
   </head>
   <body>
     <div class="app">

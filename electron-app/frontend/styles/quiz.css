@@ -1,0 +1,232 @@
+/* The quiz pane: flashcards, the three question types, feedback and the results card. */
+
+.quiz__kicker {
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  margin-bottom: 7px;
+}
+.quiz {
+  max-width: 1040px;
+  padding: 0 36px 56px;
+  margin: 0 auto;
+}
+.question-card {
+  padding: 32px;
+  margin-top: 28px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.result-card {
+  padding: 32px;
+  margin-top: 28px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  text-align: center;
+}
+.question-card h3 {
+  max-width: none;
+  margin: 0 0 24px;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.2px;
+}
+.result-card h3 {
+  max-width: none;
+  margin: 0 0 24px;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.2px;
+  color: var(--text);
+}
+.options {
+  display: grid;
+  gap: 9px;
+}
+.option {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 16px;
+  color: var(--text);
+  text-align: left;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.45;
+  cursor: pointer;
+}
+.option:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--bg-hover);
+}
+.option:disabled {
+  cursor: default;
+}
+.option__letter {
+  display: grid;
+  flex: 0 0 24px;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  color: var(--text-dim);
+  background: var(--bg-hover);
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.option--correct {
+  border-color: var(--user);
+  background: rgba(126, 224, 184, 0.1);
+}
+.option--wrong {
+  border-color: #ed8796;
+  background: rgba(237, 135, 150, 0.1);
+}
+.feedback {
+  padding-top: 18px;
+  margin-top: 18px;
+  border-top: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 12px;
+}
+.feedback--correct {
+  color: var(--user);
+}
+.feedback--wrong {
+  color: #ed8796;
+}
+.feedback__next {
+  display: block;
+  margin-top: 14px;
+}
+.result-card__score {
+  color: var(--accent);
+  font-size: 40px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  line-height: 1.1;
+}
+.result-card p {
+  margin: 0 0 20px;
+  color: var(--text-dim);
+}
+.flashcard {
+  text-align: left;
+}
+.flashcard__back {
+  padding: 10px 12px;
+  margin: 10px 0;
+  background: var(--bg-raised);
+  border-left: 2px solid var(--user);
+  border-radius: 8px;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.cloze {
+  padding: 12px;
+  margin: 10px 0;
+  overflow-x: auto;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.cloze__blank {
+  width: 12ch;
+  min-width: 8ch;
+  padding: 1px 5px;
+  margin: 0 2px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  font: inherit;
+  font-size: 14px;
+}
+.cloze__blank--correct {
+  border-color: var(--user);
+}
+.cloze__blank--wrong {
+  border-color: #e07a7a;
+}
+.cloze__expected {
+  margin: 6px 0 0;
+  color: var(--text-faint);
+  font-size: 11.5px;
+}
+.rubric {
+  margin: 8px 0 12px;
+  padding-left: 18px;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+.open__answer {
+  width: 100%;
+  font-size: 12.5px;
+  padding: 10px 12px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  line-height: 1.55;
+  resize: vertical;
+}
+.criteria {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+.criteria__missing {
+  margin: 6px 0 0;
+  color: var(--text-faint);
+  font-size: 11.5px;
+}
+.result-card__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+.result-card__meta {
+  margin: 6px 0 0;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+.result-card__percent {
+  margin-top: 2px;
+  color: var(--text-faint);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.result-card--low .result-card__score {
+  color: #e0a0a0;
+}
+.result-card--mid .result-card__score {
+  color: #e0c07a;
+}
+.result-card--good .result-card__score {
+  color: #8fb8ff;
+}
+.result-card--high .result-card__score {
+  color: #9ad6c0;
+}
+@media (max-width: 760px) {
+  .quiz {
+    padding-right: 20px;
+    padding-left: 20px;
+  }
+}
+
