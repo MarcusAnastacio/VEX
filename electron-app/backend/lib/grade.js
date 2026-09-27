@@ -243,12 +243,34 @@ export async function gradeOpen(question, answer, options = {}) {
  * @param {object} answers   { questionId: answer }
  * @returns {Promise<object>} { perQuestion, score, maxScore, answered, skipped, needsApi }
  */
+/**
+ * Whether the learner gave anything at all for this question.
+ *
+ * This only labels the report. A question nobody answered is "skipped", and calling it
+ * "missed" tells someone they got it wrong when they never tried, which is the difference
+ * the skip button exists to offer.
+ *
+ * It deliberately does not move the score. Every question stays worth a mark and a
+ * skipped one forfeits it, which is what "an unattempted attempt scores zero" pins down in
+ * backend/test/store.test.js. The hint beside the skip button says so, rather than
+ * promising a discount the grading does not give.
+ */
+function answeredNothing(answer) {
+  if (answer == null) return true;
+  if (typeof answer === 'string') return answer.trim().length === 0;
+  if (typeof answer === 'object') {
+    return Object.values(answer).every((value) => String(value ?? '').trim().length === 0);
+  }
+  return false;
+}
+
 export async function gradeAttempt(quiz, answers = {}, options = {}) {
   const questions = quiz?.questions || [];
   const perQuestion = [];
 
   for (const question of questions) {
     const answer = answers[question.id];
+    const unanswered = answeredNothing(answer);
 
     if (question.type === 'open') {
       if (options.skipOpen) {
@@ -256,7 +278,8 @@ export async function gradeAttempt(quiz, answers = {}, options = {}) {
         continue;
       }
       try {
-        perQuestion.push(await gradeOpen(question, answer, options));
+        const graded = await gradeOpen(question, answer, options);
+        perQuestion.push(unanswered ? { ...graded, unanswered: true } : graded);
       } catch (err) {
         perQuestion.push({
           questionId: question.id,
@@ -269,7 +292,9 @@ export async function gradeAttempt(quiz, answers = {}, options = {}) {
     }
 
     const result = gradeObjective(question, answer);
-    if (result) perQuestion.push(result);
+    // `unanswered` is a label, not a discount: the result keeps its awarded 0 and stays in
+    // `graded` below, so the skipped question still costs its mark.
+    if (result) perQuestion.push(unanswered ? { ...result, unanswered: true } : result);
   }
 
   const graded = perQuestion.filter((r) => typeof r.awarded === 'number');

@@ -260,6 +260,17 @@ export class CompatibilityLayer extends EventEmitter {
     if (harness) sessions = sessions.filter((s) => s.harness === harness);
     if (quizReadyOnly) sessions = sessions.filter(isQuizReady);
 
+    // Which conversations already have a quiz. Read fresh on every call, because the
+    // sidebar's pill means "a quiz exists for this conversation" and a catalog cached
+    // before the quiz was generated would keep claiming it has none.
+    let withQuiz = new Set();
+    try {
+      withQuiz = this.getStore().quizSessionIds();
+    } catch {
+      // A store that will not open is a store with no quizzes, which is the safe reading:
+      // the sidebar still renders, just without the pills.
+    }
+
     const byHarness = new Map();
     for (const s of sessions) {
       if (!byHarness.has(s.harness)) {
@@ -284,6 +295,10 @@ export class CompatibilityLayer extends EventEmitter {
         userTurns: s.userTurns,
         chars: s.chars,
         quizReady: isQuizReady(s),
+        // Whether a quiz has actually been generated, which is a different question from
+        // whether the conversation is long enough to make one from. `quizReady` answers
+        // the second; the sidebar's pill answers this one.
+        hasQuiz: withQuiz.has(s.id),
         partial: s.partial || false,
         source: s.source,
         // Sidebar grouping. `isSubagent` and `parentSessionId` come from the reader,

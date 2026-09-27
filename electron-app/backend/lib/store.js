@@ -314,6 +314,18 @@ export class QuizStore {
     return row ? hydrate(row) : null;
   }
 
+  /**
+   * Every session id that has at least one stored quiz.
+   *
+   * One query for the whole sidebar rather than a lookup per row: the list renders every
+   * conversation it knows about, and a prepared statement per row to decide which of them
+   * show a single pill is the kind of cost that only shows up on someone else's slow disk.
+   */
+  quizSessionIds() {
+    const rows = this.db.prepare('SELECT DISTINCT session_id FROM quiz').all();
+    return new Set(rows.map((row) => row.session_id));
+  }
+
   list({ sessionId, limit = 100 } = {}) {
     const rows = sessionId
       ? this.db.prepare('SELECT * FROM quiz WHERE session_id = ? ORDER BY created_at DESC LIMIT ?').all(sessionId, limit)

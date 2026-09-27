@@ -195,7 +195,7 @@ let lastQuery = null;
 /** The last render's inputs, so a toggle can redraw without app.js re-rendering. */
 let lastRender = null;
 
-function row(session, { selectedId, onSelect, ready, depth = 0, hasChildren = false }) {
+function row(session, { selectedId, onSelect, ready, hasQuiz, depth = 0, hasChildren = false }) {
   const label = projectLabel(session);
   const when = timeAgo(session.updated);
   // On a ready row the harness is the heading, because the row sits outside a group. On
@@ -218,6 +218,7 @@ function row(session, { selectedId, onSelect, ready, depth = 0, hasChildren = fa
       'aria-current': String(selectedId === session.id),
       title: `${session.title}\n${label}\n${session.messageCount} messages`
         + (ready ? '' : '\nToo short to quiz from')
+        + (hasQuiz ? '\nA quiz has already been generated' : '')
         + (depth > 0 ? '\nSpawned by the conversation above' : ''),
       onclick: () => onSelect(session.id),
     },
@@ -225,7 +226,11 @@ function row(session, { selectedId, onSelect, ready, depth = 0, hasChildren = fa
       'span',
       { class: 'row__head' },
       h('span', { class: 'row__title', text: clamp(session.title, 30) }),
-      ready && h('span', { class: 'row__pill', text: 'Quiz ready' }),
+      // The pill is about the quiz existing, not about the conversation being long
+      // enough. Readiness is what puts a row in the "Ready to quiz" section; this says
+      // there is something to open, so a conversation that was quizzed once keeps its
+      // pill even after it falls below the readiness line.
+      hasQuiz && h('span', { class: 'row__pill', text: 'Quiz ready' }),
     ),
     h(
       'span',
@@ -255,6 +260,7 @@ function node(session, options, depth = 0) {
   const rowEl = row(session, {
     ...options,
     ready: depth > 0 ? !!session.quizReady : !!options.ready,
+    hasQuiz: !!session.hasQuiz,
     depth,
     hasChildren: kids.length > 0,
   });

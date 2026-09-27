@@ -201,6 +201,21 @@
   content: '';
 }
 
+/* Skipped is not wrong, so it is not tinted: an empty neutral circle with a dash. A
+ * report with six skipped questions should not read as six mistakes. */
+.mark--skipped {
+  color: var(--text-dim);
+}
+.mark--skipped::before {
+  position: absolute;
+  top: 9px;
+  left: 5px;
+  width: 8px;
+  height: 1px;
+  background: currentColor;
+  content: '';
+}
+
 /* ── Flashcards ──────────────────────────────────────────────────────────── */
 
 .flashcard {

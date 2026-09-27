@@ -94,10 +94,11 @@ export function renderStep(container, { step, result, onRespond = () => {}, onNe
 /**
  * Skip and retry, the two moves that are not answering.
  *
- * Skip records nothing: the step is left unanswered, and an unanswered question does not
- * count against the score, so the denominator shrinks instead of the mark dropping. That
- * is the whole reason skip is worth having next to a wrong answer, and the hint says so,
- * because "skip" reads as evasion everywhere else.
+ * Skip records nothing: the step is left unanswered, which is a different thing from
+ * answering wrong and is reported as "skipped" rather than "missed". It is not free.
+ * Every question is worth a mark and a skipped one forfeits it, so the hint says that
+ * instead of promising a discount the grading does not give. Verified against
+ * gradeAttempt, where an unanswered question still lands in `graded` with an awarded 0.
  *
  * Retry is offered only on a step that has already been graded, and clears this step's
  * response so the same question can be answered again. It is per question. The whole
@@ -127,7 +128,7 @@ function stepNav({ step, result, onSkip, onRetryStep, isLast }) {
     }));
   }
   if (!row.childElementCount) return null;
-  row.append(h('span', { class: 'quiz-nav__hint', text: 'A skipped question is not marked against you' }));
+  row.append(h('span', { class: 'quiz-nav__hint', text: 'A skipped question is left unanswered and earns no mark' }));
   return row;
 }
 
@@ -531,9 +532,20 @@ function breakdown(attempt) {
   if (!rows.length) return null;
 
   const list = h('ul', { class: 'breakdown' });
-  const tally = { correct: 0, partial: 0, wrong: 0 };
+  const tally = { correct: 0, partial: 0, wrong: 0, skipped: 0 };
   for (const row of rows) {
-    const kind = row.error ? 'error' : Number(row.awarded) >= 0.85 ? 'correct' : Number(row.awarded) > 0 ? 'partial' : 'wrong';
+    // Skipped is its own outcome. Folding it into "wrong" told someone they had got a
+    // question wrong when they never answered it, which is exactly what the skip button
+    // is there to avoid. An open question that was never graded arrives as `skipped`; an
+    // objective one the learner left blank arrives as `unanswered`.
+    const isSkipped = row.skipped === true || row.unanswered === true;
+    const kind = row.error
+      ? 'error'
+      : isSkipped
+        ? 'skipped'
+        : Number(row.awarded) >= 0.85
+          ? 'correct'
+          : Number(row.awarded) > 0 ? 'partial' : 'wrong';
     tally[kind] += 1;
     const step = SEEN.get(row.questionId);
     list.append(
@@ -545,9 +557,12 @@ function breakdown(attempt) {
     );
   }
 
+  // The denominator stays the whole deck, because every question is worth a mark and a
+  // skipped one forfeits it. Only the wording of the outcome changes.
   const counts = [`${tally.correct} of ${rows.length} right`];
   if (tally.partial) counts.push(`${tally.partial} partly right`);
   if (tally.wrong) counts.push(`${tally.wrong} missed`);
+  if (tally.skipped) counts.push(`${tally.skipped} skipped`);
 
   return h('div', { class: 'breakdown-wrap' },
     h('p', { class: 'breakdown__summary', text: counts.join(' · ') }),

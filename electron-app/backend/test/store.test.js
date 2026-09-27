@@ -502,6 +502,29 @@ await check('an unattempted attempt scores zero without any request', async () =
   }
 });
 
+await check('a skipped question is labelled skipped without losing its mark', async () => {
+  const quiz = fakeQuiz(twoTopicSession());
+  const original = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({}) });
+  try {
+    // One answer given; an objective question and an open one left alone.
+    const result = await gradeAttempt(quiz, { 't1-mcq-1': 'B' });
+    const byId = Object.fromEntries(result.perQuestion.map((r) => [r.questionId, r]));
+
+    assert.equal(byId['t1-mcq-1'].unanswered, undefined, 'an answered question must not be labelled unanswered');
+    assert.equal(byId['t1-cloze-1'].unanswered, true, 'a blank cloze answer is a skip');
+    assert.equal(byId['t2-open-1'].unanswered, true, 'an empty open answer is a skip');
+
+    // The label describes the run, it does not discount it. This is the assertion that
+    // stops the word "skipped" from quietly turning into a free pass: both skipped
+    // questions keep their mark in the denominator.
+    assert.equal(byId['t1-cloze-1'].awarded, 0, 'the label must not change the mark');
+    assert.equal(result.maxScore, 3, 'the label must not shrink the denominator');
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
 await check('gradeAttempt grades objective questions without touching the network', async () => {
   const quiz = fakeQuiz(twoTopicSession());
   const original = globalThis.fetch;
@@ -697,6 +720,30 @@ await check('grading without save records nothing and the per-question results s
   assert.equal(store.stats().attempts, 0, 'a run without save created an attempt row');
   assert.equal(store.getProgress(id), null);
   store.close();
+});
+
+// ── Sidebar ────────────────────────────────────────────────────────────────
+
+await check('the sidebar is told which conversations have a quiz, which is not readiness', () => {
+  const layer = new CompatibilityLayer({ storeFile: ':memory:' });
+  const quizzed = twoTopicSession();
+  // The same conversation shape under a different id, so the catalog holds one row with a
+  // quiz and one without and the assertion can tell them apart.
+  const untouched = { ...quizzed, id: 'pi:untouched-test', nativeId: 'untouched-test' };
+  layer.getStore().saveQuiz(fakeQuiz(quizzed), quizzed, { settings: SETTINGS });
+  layer.catalog = { scanned: true, sessions: [quizzed, untouched], harnesses: [] };
+
+  const rows = layer.list().groups.flatMap((group) => group.sessions);
+  const withQuiz = rows.find((row) => row.id === quizzed.id);
+  const without = rows.find((row) => row.id === untouched.id);
+
+  assert.ok(withQuiz && without, 'both fixtures should be in the catalog');
+  assert.equal(withQuiz.hasQuiz, true, 'a conversation with a stored quiz must say so');
+  assert.equal(without.hasQuiz, false, 'a conversation with no quiz must not claim one');
+  // Readiness and having a quiz are separate questions, and the sidebar had been using
+  // the first to draw a pill that meant the second.
+  assert.equal(without.quizReady, withQuiz.quizReady, 'the fixtures should agree on readiness');
+  layer.getStore().close();
 });
 
 // ── Report ─────────────────────────────────────────────────────────────────

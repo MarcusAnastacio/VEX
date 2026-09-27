@@ -196,12 +196,21 @@ function setView(next) {
   store.set({ view: next });
 }
 
+/**
+ * The sidebar's rows: one flat list, each row carrying the display name of its harness.
+ *
+ * Three call sites build this (the first scan, a rescan, and the refresh after a quiz is
+ * generated), and they have to agree on the shape, because the sidebar joins rows by id.
+ */
+const catalogSessions = (catalog) =>
+  (catalog?.groups || []).flatMap((group) =>
+    group.sessions.map((session) => ({ ...session, harnessName: group.name })));
+
 async function rescan(options) {
   store.set({ busy: true, progress: 'Scanning…' });
   try {
     const catalog = await api.refresh(options);
-    const sessions = (catalog.groups || []).flatMap((group) =>
-      group.sessions.map((session) => ({ ...session, harnessName: group.name })));
+    const sessions = catalogSessions(catalog);
     store.set({
       catalog,
       sessions,
@@ -356,12 +365,23 @@ async function refreshAfterRun() {
   const s = store.state;
   if (!s.selectedId) return;
   try {
-    const [quizzes, staleness, button] = await Promise.all([
+    const [catalog, quizzes, staleness, button] = await Promise.all([
+      api.list(),
       api.quizzes({ sessionId: s.selectedId }),
       api.staleness({ id: s.selectedId, ...s.options }),
       api.quizButton({ id: s.selectedId, ...s.options }),
     ]);
-    store.set({ quizzes: quizzes || [], staleness, button });
+    // The catalog is re-read, not rescanned. The sidebar's pill says a quiz exists for a
+    // conversation, so the row that was just quizzed has to stop claiming it has none,
+    // and `list` reads the store fresh. A rescan would walk every harness again for a
+    // fact that one query already knows.
+    store.set({
+      catalog: catalog || s.catalog,
+      sessions: catalog ? catalogSessions(catalog) : s.sessions,
+      quizzes: quizzes || [],
+      staleness,
+      button,
+    });
   } catch (err) {
     store.set({ notice: { level: 'warn', text: String(err?.message || err) } });
   }
@@ -725,7 +745,7 @@ if (!api.available()) {
   });
   api.onReady(() => api.list().then((catalog) => {
     if (catalog?.scanned && !store.state.catalog) {
-      const sessions = (catalog.groups || []).flatMap((g) => g.sessions.map((s) => ({ ...s, harnessName: g.name })));
+      const sessions = catalogSessions(catalog);
       store.set({ catalog, sessions });
     }
   }));
