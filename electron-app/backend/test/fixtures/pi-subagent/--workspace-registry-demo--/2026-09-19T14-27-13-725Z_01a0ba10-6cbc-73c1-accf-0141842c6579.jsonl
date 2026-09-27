@@ -1,0 +1,3 @@
+{"type":"session","version":3,"id":"01a0ba10-6cbc-73c1-accf-0141842c6579","timestamp":"2026-09-19T14:27:13.725Z","cwd":"/workspace/registry-demo"}
+{"type":"message","id":"u1","parentId":null,"timestamp":"2026-09-19T14:27:20.000Z","message":{"role":"user","content":[{"type":"text","text":"the parent conversation dispatched two subagents"}]}}
+{"type":"message","id":"a1","parentId":"u1","timestamp":"2026-09-19T14:27:40.000Z","message":{"role":"assistant","content":[{"type":"text","text":"both are running"}]}}

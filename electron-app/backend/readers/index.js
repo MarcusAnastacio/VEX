@@ -10,6 +10,7 @@ import { readMarkdown } from './markdown.js';
 import { readSqlite, readSqliteScript } from './sqlite.js';
 import { readChatgptExport, readClaudeWebExport } from './exports.js';
 import { projectFromEncodedDir, projectFromPath } from '../lib/normalize.js';
+import { groupKeyFor, subagentParentFromPath } from '../lib/grouping.js';
 
 const MAX_BYTES = 64 * 1024 * 1024;
 const ZSTD = /\.zst$|\.zstd$/;
@@ -53,16 +54,41 @@ function vscodeWorkspaceMeta(file) {
   }
 }
 
+/** An ENCODED-WORKING-DIRECTORY segment: Claude-style `--home-dev-code-myapp--`. */
+const ENCODED_DIR = /^--.*--$/;
+
+/**
+ * How far up the tree to look for one.
+ *
+ * A nested subagent transcript is four levels below it
+ * (`<project>/<parent>/<runId>/run-N/session.jsonl`), and a store path is
+ * registry-supplied data, so the walk is bounded rather than run to the filesystem
+ * root. Six is comfortably past any layout the registry describes.
+ */
+const MAX_ANCESTOR_HOPS = 6;
+
 /** Best-effort project label and working directory when the transcript did not carry them. */
 function inferWorkspace(file) {
   const vs = vscodeWorkspaceMeta(file);
   if (vs?.project) return vs;
 
-  const dir = path.dirname(file);
-  const base = path.basename(dir);
-  if (/^--.*--$/.test(base)) return { project: projectFromEncodedDir(base) };
-  const parent = path.basename(path.dirname(dir));
-  if (/^--.*--$/.test(parent)) return { project: projectFromEncodedDir(parent) };
+  // Walk up until an ENCODED-WORKING-DIRECTORY segment turns up.
+  //
+  // This used to test exactly two levels: the transcript's own directory, then its
+  // parent. That is enough for a flat store and silently wrong for a nested one,
+  // where those two levels are a bare run UUID and a run directory, so nothing
+  // matched and the session fell through to projectFromPath. Every subagent
+  // transcript was then attributed to whatever the last two segments of its path
+  // happened to be, which is how spawned conversations pile up as loose top-level
+  // rows with the wrong project.
+  let dir = path.dirname(file);
+  for (let hop = 0; hop < MAX_ANCESTOR_HOPS; hop++) {
+    const base = path.basename(dir);
+    if (ENCODED_DIR.test(base)) return { project: projectFromEncodedDir(base) };
+    const parent = path.dirname(dir);
+    if (!parent || parent === dir) break;
+    dir = parent;
+  }
   return { project: projectFromPath(file) };
 }
 
@@ -87,6 +113,11 @@ export function readStoreFile(file, ctx) {
   const isSqliteStore = SQLITE_EXT.test(basename) || (kind.startsWith('sqlite') && !TEXT_EXTS.has(ext));
 
   const inferred = inferWorkspace(file);
+  // Structural, not editorial: a transcript at `<project>/<parentId>/<runId>/run-N/…`
+  // is a subagent of `<parentId>` because Pi named the directory after that parent's
+  // transcript file. No transcript content is consulted, so a child whose header is
+  // missing or truncated is still attributed correctly.
+  const nestedParent = subagentParentFromPath(file);
 
   /**
    * A reader that returns `cwd: undefined` (because the transcript did not carry
@@ -98,6 +129,17 @@ export function readStoreFile(file, ctx) {
     for (const s of sessions) {
       if (!s.cwd && inferred.cwd) s.cwd = inferred.cwd;
       if (!s.project && inferred.project) s.project = inferred.project;
+      if (nestedParent) {
+        // A parent proved by the path outranks anything a record claimed, and the
+        // harness prefix goes on here so the two agree on one representation.
+        s.parentSessionId = nestedParent;
+        s.parentId = `${s.harness}:${nestedParent}`;
+        s.isSubagent = true;
+      }
+      // finalizeSession() computed groupKey before it knew a cwd, because a VS Code
+      // workspace folder and a Claude-style encoded directory both supply one only
+      // here. Recompute, or every backfilled session groups by its fallback instead.
+      if (s.groupKey) s.groupKey = groupKeyFor({ cwd: s.cwd, project: s.project, harness: s.harness });
     }
     return sessions;
   };

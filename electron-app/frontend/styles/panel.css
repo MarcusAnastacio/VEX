@@ -417,10 +417,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.chip--more {
-  color: var(--text-faint);
-  border-style: dashed;
-}
 /* Informational, not a warning: amber in this pane means "this cannot be quizzed". */
 .settings__notice {
   margin: 0;
@@ -594,6 +590,113 @@
   font-size: 11.5px;
   line-height: 1.55;
 }
+/* The three stages, lit one after another. Staggered delays rather than a script
+ * that walks a list: the timing is in the stylesheet, so it survives every re-render
+ * the panel does while a generation is in flight. */
+.busy__stages {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 11px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.busy__stage {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.busy__dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  margin-top: 5px;
+  background: var(--accent);
+  border-radius: 50%;
+  animation: p-blink 1.8s ease-in-out infinite;
+}
+.busy__stage--1 .busy__dot {
+  animation-delay: 0ms;
+}
+.busy__stage--2 .busy__dot {
+  animation-delay: 450ms;
+}
+.busy__stage--3 .busy__dot {
+  animation-delay: 900ms;
+}
+.busy__stagetext {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.busy__stagelabel {
+  color: var(--text);
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.busy__stagedetail {
+  color: var(--text-faint);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+/* The topics actually in flight, so a long generation shows what it is chewing on
+ * rather than an indeterminate bar and a promise. */
+.busy__topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.busy__topic {
+  max-width: 240px;
+  padding: 2px 8px;
+  color: var(--text-dim);
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  font-size: 10.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: p-breathe 2.4s ease-in-out infinite;
+}
+/* A second pass of light over the bar, offset from the fill, so the two do not move
+ * as one rigid object. */
+.busy__sweep {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    color-mix(in oklab, var(--accent) 30%, transparent) 50%,
+    transparent 80%
+  );
+  animation: p-sweep 2400ms ease-in-out infinite;
+}
+.busy__bar {
+  position: relative;
+}
+@keyframes p-blink {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes p-breathe {
+  0%,
+  100% {
+    opacity: 0.65;
+  }
+  50% {
+    opacity: 1;
+  }
+}
 @keyframes p-spin {
   to {
     transform: rotate(360deg);
@@ -610,7 +713,10 @@
 /* One spinner everywhere, so it is never left turning over a pane that has moved on. */
 @media (prefers-reduced-motion: reduce) {
   .busy__spinner,
-  .busy__fill {
+  .busy__fill,
+  .busy__sweep,
+  .busy__dot,
+  .busy__topic {
     animation: none;
   }
 }
@@ -993,6 +1099,419 @@
   white-space: normal;
 }
 
+/* ── Panel body: topics, what you will get, saved quizzes ───────────────────
+ * Three sections that live in both conversation views, stacked under the settings
+ * form (or under nothing at all, in the transcript view). One column: the settings
+ * card is already the widest thing in this pane and a second column would make the
+ * eye hunt for which block belongs to which action.
+ *
+ * Colours are all tokens, including the tints, which are mixed from --accent rather
+ * than written out, so the theme pass can move the accent without touching a line. */
+.panel {
+  display: flex;
+  flex-direction: column;
+}
+.panel > .topics,
+.panel > .drop,
+.panel > .panel__pair {
+  padding: 14px 16px;
+  border-top: 1px solid var(--border-soft);
+}
+.panel > .settings + .topics {
+  border-top: 1px solid var(--border);
+}
+.panel__pair {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.panel__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 9px;
+}
+.panel__label {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+.panel__hint {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+.panel__empty {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+/* ── Conversation topics ───────────────────────────────────────────────────
+ * The complete list, one row per topic, each carrying its own length. Rows are
+ * drag sources for the drop zone below and read as rows rather than cards, because
+ * there can be a dozen of them and a wall of cards is a wall. */
+.topics__list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 320px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  background: var(--border-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--p-r);
+}
+.topic {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  background: var(--bg);
+  transition: background-color var(--p-t);
+}
+.topic:hover {
+  background: var(--bg-hover);
+}
+.topic--on {
+  background: var(--accent-soft);
+}
+.topic--dragging {
+  opacity: 0.5;
+}
+.topic__name {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  padding: 0;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.topic__name--plain {
+  cursor: default;
+}
+.topic__name:focus-visible {
+  outline: none;
+  box-shadow: var(--p-ring);
+  border-radius: var(--p-r-sm);
+}
+.topic__label {
+  font-size: 12px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.topic__meta {
+  color: var(--text-faint);
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+/* The length is the reason this section exists, so it stays a number on every row
+ * rather than becoming a tooltip that only a hover reveals. */
+.topic--on .topic__meta {
+  color: var(--text-dim);
+}
+.topic__toggle {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 10.5px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color var(--p-t), border-color var(--p-t), background-color var(--p-t);
+}
+.topic__toggle:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg-active);
+  border-color: var(--accent);
+}
+.topic__toggle:disabled {
+  color: var(--text-faint);
+  cursor: default;
+}
+.topic--on .topic__toggle {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* ── What you will get ─────────────────────────────────────────────────────
+ * A drop target that says what it wants and nothing else when empty, because the
+ * empty state is an instruction. */
+.drop__roll {
+  margin-left: auto;
+  padding: 3px 10px;
+  font-size: 11px;
+}
+.dropzone {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 62px;
+  padding: 10px;
+  background: var(--bg);
+  border: 1px dashed var(--border);
+  border-radius: var(--p-r);
+  transition: border-color var(--p-t), background-color var(--p-t);
+}
+.dropzone--over {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  border-style: solid;
+}
+.dropzone--filled {
+  border-style: solid;
+}
+.dropzone__empty {
+  width: 100%;
+  color: var(--text-faint);
+  font-size: 12px;
+  text-align: center;
+}
+.dropzone--over .dropzone__empty {
+  color: var(--accent);
+}
+.dropchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 3px 4px 3px 9px;
+  color: var(--text);
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11.5px;
+}
+.dropchip__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dropchip__remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  color: var(--text-faint);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  background: none;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: color var(--p-t), background-color var(--p-t);
+}
+.dropchip__remove:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg-active);
+}
+.dropchip__remove:disabled {
+  cursor: default;
+}
+/* What each chosen topic is worth: the cards and questions it produces, and how much
+ * conversation they are made from. Without this the drop zone is a bag of labels. */
+.drop__gain {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 8px 0 0;
+  padding: 0;
+  overflow: hidden;
+  list-style: none;
+  background: var(--border-soft);
+  border-radius: var(--p-r);
+}
+.drop__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) auto auto;
+  gap: 10px;
+  align-items: baseline;
+  padding: 5px 9px;
+  background: var(--bg-raised);
+  font-size: 11px;
+}
+.drop__rowlabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.drop__rowout {
+  color: var(--accent);
+  white-space: nowrap;
+}
+.drop__rowlen {
+  color: var(--text-faint);
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* ── Saved quizzes ─────────────────────────────────────────────────────────
+ * One row per stored quiz with the three facts that decide whether anyone opens it:
+ * how far it got, what it scored, and when it was last touched. */
+.saved__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.saved__row {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--p-r);
+  background: var(--bg);
+  transition: border-color var(--p-t), background-color var(--p-t);
+}
+.saved__row:hover {
+  background: var(--bg-raised);
+  border-color: var(--border);
+}
+.saved__open {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: var(--p-r);
+  cursor: pointer;
+}
+.saved__open--plain {
+  cursor: default;
+}
+.saved__open:focus-visible {
+  outline: none;
+  box-shadow: var(--p-ring);
+}
+.saved__title {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.saved__counts {
+  color: var(--text-faint);
+  font-size: 10.5px;
+}
+.saved__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 2px;
+  font-size: 10.5px;
+}
+/* State as colour and words, never colour alone: three states, three tints, all
+ * derived from tokens so the light theme needs no second set. */
+.saved__state {
+  padding: 1px 7px;
+  color: var(--text-dim);
+  background: var(--bg-hover);
+  border-radius: 999px;
+}
+.saved__state--going {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.saved__state--done {
+  color: var(--user);
+  background: color-mix(in oklab, var(--user) 14%, transparent);
+}
+.saved__score {
+  color: var(--text-dim);
+}
+.saved__time {
+  color: var(--text-faint);
+}
+
+/* ── Back to top ───────────────────────────────────────────────────────────
+ * Fixed to the window rather than to the pane, because the pane scrolls inside the
+ * window and a sticky button inside a settings card would only work over the card. */
+.totop {
+  position: fixed;
+  right: 26px;
+  bottom: 22px;
+  z-index: 5;
+  padding: 7px 13px;
+  color: var(--text);
+  font: inherit;
+  font-size: 11.5px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: var(--p-lift);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--p-t), background-color var(--p-t), border-color var(--p-t);
+}
+.totop--on {
+  opacity: 1;
+}
+.totop:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+}
+.totop:focus-visible {
+  outline: none;
+  box-shadow: var(--p-ring);
+}
+
+/* ── The title, under the mouse ────────────────────────────────────────────
+ * The position of the pointer arrives as two custom properties written once, by one
+ * delegated listener in panel.js. Everything visible is here, so the effect costs no
+ * layout per mouse move and the theme pass can restyle it without touching the
+ * component. The defaults keep the light centred for a keyboard user, who never
+ * sends a pointer event at all. */
+.session__title {
+  --title-x: 50%;
+  --title-y: 50%;
+  position: relative;
+  display: inline-block;
+  padding: 2px 10px;
+  margin-left: -10px;
+  border-radius: var(--p-r);
+  transition: color var(--p-t), background-color var(--p-t), text-shadow var(--p-t);
+}
+.session__title:hover {
+  color: var(--text);
+  text-shadow: 0 0 20px var(--accent-soft);
+  background: radial-gradient(
+    260px 90px at var(--title-x) var(--title-y),
+    var(--accent-soft),
+    transparent 72%
+  );
+}
+/* The line under the title belongs to the same object, so it lifts with it. */
+.session__titles:has(.session__title:hover) .session__sub {
+  color: var(--text-dim);
+}
+.session__title:focus-visible {
+  outline: none;
+  box-shadow: var(--p-ring);
+}
+
 /* ── Narrow ───────────────────────────────────────────────────────────────
  * The window has a 900px floor, so this only bites on a small display or a
  * narrow split. Everything stays on the same left edge, and the actions wrap
@@ -1055,6 +1574,23 @@
   }
   .msg__body {
     font-size: 13px;
+  }
+  .panel__pair {
+    gap: 14px;
+  }
+  .drop__row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+  .drop__rowlen {
+    text-align: left;
+  }
+  .drop__roll {
+    margin-left: 0;
+  }
+  .totop {
+    right: 14px;
+    bottom: 14px;
   }
 }
 

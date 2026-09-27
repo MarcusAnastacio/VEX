@@ -333,7 +333,7 @@ export class QuizStore {
         flashcardCount: quiz.flashcards.length,
         types: [...new Set(quiz.questions.map((q) => q.type))],
         progress: (() => {
-          const row = this.db.prepare('SELECT step_index, finished, score, max_score, answers FROM attempt WHERE quiz_id = ?').get(quiz.id);
+          const row = this.db.prepare('SELECT step_index, finished, score, max_score, answers, started_at, updated_at FROM attempt WHERE quiz_id = ?').get(quiz.id);
           if (!row) return null;
           return {
             stepIndex: row.step_index,
@@ -341,6 +341,13 @@ export class QuizStore {
             resumable: Object.keys(JSON.parse(row.answers || '{}')).length > 0,
             score: row.score,
             maxScore: row.max_score,
+            // LAST ACCESSED, not last answered. The attempt row's updated_at moves on
+            // every saveProgress, finishAttempt and clearProgress, so it is the moment
+            // the quiz was last touched. started_at is the floor for a row written
+            // before the column existed, and createdAt covers a quiz that was never
+            // started at all. This is what the saved-quiz list sorts on to put the one
+            // the user was working on at the top.
+            updatedAt: row.updated_at || row.started_at || quiz.createdAt,
           };
         })(),
       };
@@ -417,6 +424,9 @@ export class QuizStore {
    * rather than dropping the user on a results screen they have already read. A later
    * completion overwrites the score, which is what was asked for: one end score per quiz,
    * the most recent one.
+   *
+   * Returns `{ id, quizId, score, maxScore, updated }`, where `id` is the attempt row
+   * (the same row a later completion updates) so a caller can identify what it recorded.
    */
   finishAttempt(quizId, { score = null, maxScore = null } = {}) {
     if (!this.getQuiz(quizId)) throw new QuizStoreError(`no quiz ${quizId}`);
@@ -427,16 +437,18 @@ export class QuizStore {
       this.db
         .prepare('UPDATE attempt SET step_index=0, finished=1, score=?, max_score=?, answers=?, results=NULL, updated_at=?, finished_at=? WHERE id=?')
         .run(score, maxScore, JSON.stringify({}), now, now, existing.id);
-      return { quizId, score, maxScore, updated: true };
+      // `id` is the attempt row, so a caller that needs to identify the run it just
+      // recorded does not have to look the row up a second time.
+      return { id: existing.id, quizId, score, maxScore, updated: true };
     }
 
-    this.db
+    const info = this.db
       .prepare(
         `INSERT INTO attempt (quiz_id, started_at, updated_at, finished_at, step_index, finished, score, max_score, answers, results)
          VALUES (?,?,?,?,0,1,?,?,?,NULL)`,
       )
       .run(quizId, now, now, now, score, maxScore, JSON.stringify({}));
-    return { quizId, score, maxScore, updated: false };
+    return { id: Number(info.lastInsertRowid), quizId, score, maxScore, updated: false };
   }
 
   /**

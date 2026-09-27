@@ -23,18 +23,35 @@ const initial = {
   readiness: null,
   /** The plan for the selected conversation: topics, expected counts. */
   plan: null,
-  /** The quiz currently on screen, with its stored id when it came from the store. */
+  /** The conversation segmented into topics: { topics, boundaries, stats }. */
+  topics: [],
+  /** Summaries of the quizzes already stored for this conversation, newest first. */
+  quizzes: [],
+  /** Topic ids the user has picked, empty when the automatic selection applies. */
+  topicSelection: [],
+  /** The quiz currently on screen, with `stored` when it came back from the store. */
   quiz: null,
-  /** current | results */
-  stage: 'idle',
+  /**
+   * Which of the three per-conversation views is on screen.
+   *
+   * transcript | generate | quiz
+   *
+   * The results screen is not a fourth value: it renders inside the quiz view when no
+   * step is left, because that is what "no step left" means for a quiz you finished.
+   */
+  view: 'transcript',
   /** Per-question results once graded. */
   attempt: null,
   /** The quartile band for the final score, from the backend. */
   band: null,
   /** The score from the last completed run, so a resumed quiz can show it. */
   lastScore: null,
-  /** The label and action for the top-right button: { action, label, reason }. */
+  /** The label and action for the generate view's submit button: { action, label, reason }. */
   button: null,
+  /** How far the stored quiz has drifted from the conversation: state, newMessages, ... */
+  staleness: null,
+  /** Where the store lives and whether it is usable, from the backend. */
+  storeInfo: null,
   /** Any message the UI should surface, with its severity. */
   notice: null,
   /** True while a generation is in flight. */

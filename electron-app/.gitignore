@@ -16,3 +16,4 @@ screenshots/
 #                            operation-log format, and it is tiny (~5 KB).
 # package-lock.json          pins the Electron version, which must stay >= 44
 #                            for node:sqlite and zstd support
+.pi/

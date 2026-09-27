@@ -10,6 +10,7 @@
 
 import { contentToParts, contentToText } from '../lib/text.js';
 import { finalizeSession, makeMessage, toEpochMs } from '../lib/normalize.js';
+import { SESSION_PARENT_FIELDS, SESSION_ID_FIELDS } from '../lib/grouping.js';
 
 let DatabaseSync = null;
 let sqliteError = null;
@@ -181,6 +182,13 @@ function sessionsFromDb(db, ctx, file) {
   let bySession = readCursorKeyValue(db);
   if (bySession.size === 0) bySession = readGenericTable(db);
 
+  // Several agents keep a session index beside the messages, and that index is where
+  // a session-level parent lives. Crush has sessions.parent_session_id, Zed has
+  // threads.parent_id, OpenClaw has session_windows.previous_session_id (plus
+  // parent_session_key and spawned_by). None of them put it on a message row, so this
+  // has to be a separate read of the index table rather than a field on the messages.
+  const parents = readSessionParents(db);
+
   const out = [];
   for (const [sessionId, messages] of bySession) {
     if (messages.length === 0) continue;
@@ -189,10 +197,48 @@ function sessionsFromDb(db, ctx, file) {
       nativeId: sessionId,
       messages,
       source: 'sqlite',
+      parentSessionId: parents.get(sessionId) ?? null,
     });
     if (session) out.push(session);
   }
   return out;
+}
+
+/**
+ * child session id -> parent session id, read from whichever table holds both columns.
+ *
+ * A child whose parent is not in this store still gets a link: `parentId` is a real
+ * value from the file, and the sidebar can decide what to do with a parent it cannot
+ * open. What it does not do is guess.
+ */
+function readSessionParents(db) {
+  const parents = new Map();
+
+  for (const table of listTables(db)) {
+    const cols = columnsOf(db, table);
+    if (cols.length === 0) continue;
+    const parentCol = SESSION_PARENT_FIELDS.find((c) => cols.includes(c));
+    if (!parentCol) continue;
+    const idCol = SESSION_ID_FIELDS.find((c) => cols.includes(c));
+    if (!idCol) continue;
+
+    let rows = [];
+    try {
+      rows = db.prepare(`SELECT ${JSON.stringify(idCol)} AS child, ${JSON.stringify(parentCol)} AS parent FROM ${JSON.stringify(table)}`).all();
+    } catch {
+      continue;
+    }
+    for (const row of rows) {
+      const child = row.child == null ? '' : String(row.child).trim();
+      if (!child) continue;
+      const parent = row.parent == null ? '' : String(row.parent).trim();
+      // First writer wins, so a store with two index tables reports the one whose
+      // parent column holds a session ID rather than a session key.
+      if (!parent || parents.has(child)) continue;
+      parents.set(child, parent);
+    }
+  }
+  return parents;
 }
 
 function placeholderFor(ctx, file, why) {

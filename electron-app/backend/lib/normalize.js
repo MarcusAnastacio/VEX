@@ -6,7 +6,7 @@
 
 import path from 'node:path';
 import { deriveTitle } from './text.js';
-
+import { sessionParentId, groupKeyFor } from './grouping.js';
 /**
  * @typedef {Object} Message
  * @property {'user'|'assistant'|'system'|'tool'} role
@@ -29,6 +29,10 @@ import { deriveTitle } from './text.js';
  * @property {Message[]} messages
  * @property {number}  userTurns
  * @property {number}  chars
+ * @property {string|null} [parentId]  the parent in normalized id space, `<harness>:<nativeId>`
+ * @property {string|null} [parentSessionId]  the parent's NATIVE id, exactly as the store named it
+ * @property {boolean} [isSubagent]    true only from a proven signal; false when unknown
+ * @property {string}  groupKey        what the sidebar groups this session by
  * @property {boolean} [partial]      parsed, but some turns were undecodable
  */
 
@@ -129,13 +133,30 @@ export function finalizeSession(input) {
 
   const nativeId = String(input.nativeId || input.id || path.basename(String(input.path || 'session')));
 
+  // The parent is read from the store, never inferred. Most formats have no
+  // session-level parent at all; the ones that do are listed in lib/grouping.js, and
+  // Pi's comes from where the file sits on disk rather than from any field inside it.
+  const parentSessionId = sessionParentId(input.parentSessionId ?? input.parentId, '');
+  // A self-link is a store bug or a record resumed in place, not a hierarchy, and
+  // rendering it would nest a session inside itself.
+  const parentId =
+    parentSessionId && parentSessionId !== nativeId ? sessionParentId(parentSessionId, input.harness) : null;
+  const cwd = input.cwd || null;
+
   return {
     id: `${input.harness}:${nativeId}`,
     nativeId,
     harness: input.harness,
     harnessName: input.harnessName || input.harness,
     project: input.project || 'unknown project',
-    ...(input.cwd ? { cwd: input.cwd } : {}),
+    ...(cwd ? { cwd } : {}),
+    // FALSE, not undefined, when nothing proves it. The sidebar hides subagents by
+    // default, so an unknown must read as a normal conversation: a wrong `true`
+    // makes a real conversation disappear, which is far worse than an extra row.
+    isSubagent: input.isSubagent === true,
+    parentSessionId: parentSessionId === nativeId ? null : parentSessionId,
+    parentId,
+    groupKey: groupKeyFor({ cwd, project: input.project, harness: input.harness }),
     title,
     ...(input.path ? { path: input.path } : {}),
     source: input.source || 'file',

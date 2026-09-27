@@ -9,7 +9,7 @@
     "scan": "node cli.js",
     "scan:fixtures": "node cli.js --fixtures",
     "scan:json": "node cli.js --json",
-    "test": "node test/readers.test.js && node test/redact.test.js && node test/windows.test.js && node test/digest.test.js && node test/topics.test.js && node test/quiz.test.js && node test/store.test.js && node test/mock-vscode-chat.js",
+    "test": "node test/readers.test.js && node test/redact.test.js && node test/windows.test.js && node test/digest.test.js && node test/topics.test.js && node test/quiz.test.js && node test/store.test.js && node test/mock-generator.test.js && node test/mock-vscode-chat.js",
     "digest": "node cli.js --digest",
     "topics": "node cli.js --topics",
     "docs:example": "node docs/generate-example.js",

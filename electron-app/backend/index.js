@@ -69,7 +69,21 @@ export class CompatibilityLayer extends EventEmitter {
     if (!quiz || !quiz.ok) return quiz;
     try {
       const saved = this.getStore().saveQuiz(quiz, session, {
-        settings: { ...opts, types: quiz.settings?.types },
+        // The settings that were ASKED for, with the ones the generator actually
+        // resolved filled in.
+        //
+        // This matters more than it looks. `settingsKey` folds flashcardsPerTopic in,
+        // so persisting what the caller sent rather than what was used means that
+        // generating with the default and generating with an explicit `2` produce
+        // two different settings keys and therefore two different quiz ids for the
+        // same deck. Taking the effective values makes the id a function of the quiz
+        // that was built, which is the only thing the id is for.
+        settings: {
+          ...opts,
+          types: quiz.settings?.types ?? opts.types,
+          flashcardsPerTopic: quiz.settings?.flashcardsPerTopic ?? opts.flashcardsPerTopic,
+          questionCount: quiz.settings?.questionCount ?? opts.questionCount,
+        },
         redaction: quiz.redaction,
         // Generated to replace: anything answered belongs to the previous questions.
         preserveProgress: false,
@@ -182,12 +196,13 @@ export class CompatibilityLayer extends EventEmitter {
     if (!quiz) return null;
     const result = await gradeAttempt(quiz, answers, opts);
     if (opts?.save && typeof quizOrId === 'string') {
-      result.attemptId = this.getStore().saveAttempt(quizOrId, {
-        answers,
+      // One end score per quiz: finishAttempt keeps the score and resets the position,
+      // overwriting the row from a previous run rather than appending another.
+      const finished = this.getStore().finishAttempt(quizOrId, {
         score: result.score,
         maxScore: result.maxScore,
-        results: result.perQuestion,
       });
+      result.attemptId = finished.id;
     }
     return result;
   }
@@ -271,6 +286,16 @@ export class CompatibilityLayer extends EventEmitter {
         quizReady: isQuizReady(s),
         partial: s.partial || false,
         source: s.source,
+        // Sidebar grouping. `isSubagent` and `parentSessionId` come from the reader,
+        // which only sets them from a proven signal (see lib/grouping.js), so a
+        // session that might be a subagent arrives here as false rather than absent:
+        // the UI can hide the subagent ones without ever hiding one on a guess.
+        isSubagent: s.isSubagent === true,
+        parentSessionId: s.parentSessionId ?? null,
+        // The parent in normalized id space, so the sidebar can join it against a
+        // catalog row by equality instead of rebuilding the `<harness>:` prefix.
+        parentId: s.parentId ?? null,
+        groupKey: s.groupKey,
       });
     }
 
@@ -442,7 +467,9 @@ export { sqliteAvailable } from './readers/sqlite.js';
 export { redact, redactPayload, patternKinds } from './lib/redact.js';
 export { buildDigest, digestFits, extractTouched, renderTurnRange } from './lib/digest.js';
 export { deriveTopics, topicSlice, topicSlices } from './lib/topics.js';
-export { generateQuiz, planQuiz, quizSchema, validateResult, quizCapabilities, assessReadiness, quizButtonState, scoreBand, QUESTION_TYPES, READINESS, DEFAULTS as QUIZ_DEFAULTS } from './lib/quiz.js';
+export { generateQuiz, planQuiz, quizSchema, validateResult, quizCapabilities, assessReadiness, quizButtonState, scoreBand, QUESTION_TYPES, READINESS, FLASHCARDS_PER_TOPIC, clampFlashcardsPerTopic, DEFAULTS as QUIZ_DEFAULTS } from './lib/quiz.js';
+export { mockEnabled, mockTopicResponse, MOCK_ENV, MOCK_MODEL } from './lib/mock.js';
+export { sessionParentId, groupKeyFor, isSubagentName, subagentParentFromPath, SESSION_PARENT_FIELDS, SESSION_ID_FIELDS } from './lib/grouping.js';
 export { generateJson, listModels, hasApiKey, resolveApiKey, GeminiError, DEFAULT_MODEL_CHAIN } from './lib/gemini.js';
 export { QuizStore, QuizStoreError, sqliteAvailable as storeAvailable, defaultStorePath, fingerprintSession, settingsKey, quizIdFor, GENERATOR_VERSION } from './lib/store.js';
 export { gradeAttempt, gradeOpen, gradeObjective, gradeMcq, gradeCloze, gradeSchema, normalizeAnswer } from './lib/grade.js';

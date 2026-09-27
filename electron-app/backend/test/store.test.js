@@ -15,6 +15,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { QuizStore, fingerprintSession, settingsKey, quizIdFor, GENERATOR_VERSION } from '../lib/store.js';
 import { gradeAttempt, gradeObjective, gradeMcq, gradeCloze, gradeOpen, gradeSchema, normalizeAnswer } from '../lib/grade.js';
 import { finalizeSession } from '../lib/normalize.js';
+import { CompatibilityLayer } from '../index.js';
 
 let passed = 0;
 const failures = [];
@@ -601,6 +602,101 @@ await check('the grading schema makes every field required', async () => {
     assert.ok(schema.required.includes(field), `${field} is not required`);
   }
   assert.deepEqual(schema.properties.perCriterion.items.required, ['criterion', 'awarded', 'comment']);
+});
+
+// ── Saving a graded run ─────────────────────────────────────────────────────
+
+/**
+ * A layer backed by a throwaway database with one stored quiz on it.
+ * `progress` seeds a half-finished position, so the position reset is observable.
+ */
+function layerWithStoredQuiz({ progress = null } = {}) {
+  const layer = new CompatibilityLayer({ storeFile: ':memory:' });
+  const s = twoTopicSession();
+  const { id } = layer.getStore().saveQuiz(fakeQuiz(s), s, { settings: SETTINGS });
+  if (progress) layer.getStore().saveProgress(id, progress);
+  return { layer, id, store: layer.getStore() };
+}
+
+// `skipOpen` keeps the open question out of it, so this is decided entirely offline.
+const OFFLINE = { save: true, skipOpen: true };
+const ALL_RIGHT = { 't1-mcq-1': 'B', 't1-cloze-1': 'release' };
+const HALF_RIGHT = { 't1-mcq-1': 'A', 't1-cloze-1': 'release' };
+
+await check('grading a stored quiz with save persists the score', async () => {
+  // The "save the score at the end of the quiz" path. It used to call a method that
+  // did not exist, so the score was lost at exactly the moment the user wanted it.
+  const { layer, id, store } = layerWithStoredQuiz();
+  const before = store.stats().attempts;
+
+  const result = await layer.gradeQuiz(id, ALL_RIGHT, OFFLINE);
+  assert.ok(result, 'grading a stored id returned nothing');
+  assert.equal(result.maxScore, 2, 'the open question should have been skipped, not graded');
+  assert.equal(result.score, 2);
+
+  assert.equal(store.stats().attempts - before, 1, 'the graded run did not add exactly one attempt');
+  assert.equal(store.getProgress(id).score, result.score, 'the score was not persisted');
+  assert.equal(store.getProgress(id).maxScore, result.maxScore);
+  assert.equal(store.getProgress(id).completed, true);
+  store.close();
+});
+
+await check('grading the same quiz again replaces the score instead of adding to it', async () => {
+  // One end score per quiz, the most recent one: a second run must not accumulate.
+  const { layer, id, store } = layerWithStoredQuiz();
+  const first = await layer.gradeQuiz(id, ALL_RIGHT, OFFLINE);
+  const second = await layer.gradeQuiz(id, HALF_RIGHT, OFFLINE);
+
+  assert.equal(first.score, 2);
+  assert.equal(second.score, 1);
+  assert.equal(store.stats().attempts, 1, 'a second run created a second attempt row');
+  assert.equal(store.getProgress(id).score, 1, 'the new score did not replace the old one');
+  assert.equal(store.getProgress(id).percentage, 50);
+  store.close();
+});
+
+await check('a saved grade reports the attempt row it wrote to', async () => {
+  // `attemptId` has to identify the run that was just recorded, otherwise a caller has
+  // nothing to hang a confirmation on. It must be the same row a retake updates.
+  const { layer, id, store } = layerWithStoredQuiz();
+  const first = await layer.gradeQuiz(id, ALL_RIGHT, OFFLINE);
+  assert.ok(first.attemptId, 'no attemptId came back');
+  assert.equal(typeof first.attemptId, 'number');
+  assert.equal(
+    store.db.prepare('SELECT id FROM attempt WHERE quiz_id = ?').get(id).id,
+    first.attemptId,
+    'the returned attemptId is not the stored row',
+  );
+
+  const second = await layer.gradeQuiz(id, HALF_RIGHT, OFFLINE);
+  assert.equal(second.attemptId, first.attemptId, 'the retake should report the same row');
+  store.close();
+});
+
+await check('a saved grade resets the position so the quiz is not resumable', async () => {
+  // Intended: coming back offers a fresh attempt rather than a results screen already read.
+  const { layer, id, store } = layerWithStoredQuiz({ progress: { stepIndex: 2, answers: { 't1-mcq-1': 'B' } } });
+  assert.equal(store.getProgress(id).resumable, true, 'the seeded position was not resumable');
+
+  await layer.gradeQuiz(id, ALL_RIGHT, OFFLINE);
+
+  const p = store.getProgress(id);
+  assert.equal(p.stepIndex, 0, 'the position was not reset');
+  assert.deepEqual(p.answers, {}, 'answered questions survived the finish');
+  assert.equal(p.resumable, false, 'a finished quiz must not resume');
+  assert.equal(p.score, 2, 'resetting the position must not cost the score');
+  store.close();
+});
+
+await check('grading without save records nothing and the per-question results stay out of the store', async () => {
+  // The results screen renders from renderer state; the store deliberately keeps only
+  // the score, so a graded run must not leave a results blob behind.
+  const { layer, id, store } = layerWithStoredQuiz();
+  const result = await layer.gradeQuiz(id, ALL_RIGHT, { skipOpen: true });
+  assert.equal(result.attemptId, undefined, 'attemptId was set without save');
+  assert.equal(store.stats().attempts, 0, 'a run without save created an attempt row');
+  assert.equal(store.getProgress(id), null);
+  store.close();
 });
 
 // ── Report ─────────────────────────────────────────────────────────────────

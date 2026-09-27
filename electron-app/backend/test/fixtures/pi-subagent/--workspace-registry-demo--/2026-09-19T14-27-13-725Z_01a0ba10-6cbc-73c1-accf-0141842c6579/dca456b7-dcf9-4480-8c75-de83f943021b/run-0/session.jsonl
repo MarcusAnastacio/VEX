@@ -1,0 +1,5 @@
+{"type":"session","version":3,"id":"01a0e343-1b93-719a-a67c-3ba080d6c0a1","timestamp":"2026-09-19T14:27:01.140Z","cwd":"/workspace/registry-demo"}
+{"type":"model_change","id":"e8eb150f","parentId":null,"timestamp":"2026-09-19T14:27:01.151Z","provider":"anthropic","modelId":"claude-opus-4"}
+{"type":"session_info","id":"bb53b4f7","parentId":"73523a92","timestamp":"2026-09-19T14:27:01.324Z","name":"subagent-worker-3853560c-26c8-4e63-92a1-9a5c1dd41541-1"}
+{"type":"message","id":"u1","parentId":"bb53b4f7","timestamp":"2026-09-19T14:27:05.000Z","message":{"role":"user","content":[{"type":"text","text":"Task: summarise the reader module and report back"}]}}
+{"type":"message","id":"a1","parentId":"u1","timestamp":"2026-09-19T14:27:20.000Z","message":{"role":"assistant","content":[{"type":"text","text":"the reader dispatches on format kind and file extension"}]}}

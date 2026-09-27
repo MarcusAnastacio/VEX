@@ -1,0 +1,3 @@
+{"type":"session","version":3,"id":"01a0e343-2b6b-81f6-98f3-a4b590c548d74","timestamp":"2026-09-20T09:00:02.000Z"}
+{"type":"message","id":"u1","parentId":null,"timestamp":"2026-09-20T09:00:05.000Z","message":{"role":"user","content":[{"type":"text","text":"a transcript with a run directory and no parent file"}]}}
+{"type":"message","id":"a1","parentId":"u1","timestamp":"2026-09-20T09:00:09.000Z","message":{"role":"assistant","content":[{"type":"text","text":"so the nesting alone proves nothing"}]}}

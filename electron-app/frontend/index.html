@@ -57,30 +57,71 @@
           <div class="empty__steps"><span>01 Select a conversation</span><span>02 Add a focus</span><span>03 Test yourself</span></div>
         </div>
 
-        <article class="session" id="session" hidden>
+        <!-- The one header, above all three views.
+             It has to sit outside #session and #quiz, because both of those are hidden
+             depending on the view and the view switch has to be reachable from all of
+             them. The id lives on a plain wrapper because .session__head sets a
+             display, which would beat the [hidden] rule. -->
+        <div id="session-head" hidden>
           <header class="session__head">
             <div class="session__titles">
               <h2 class="session__title" id="session-title"></h2>
               <p class="session__sub" id="session-sub"></p>
             </div>
+            <!-- The only button beside the title, and the only view switch in the app.
+                 Its label comes from lib/labels.js, and it never generates: it moves
+                 between the transcript and the generate view and nothing else. -->
             <div class="session__actions">
-              <button id="show-payload" class="btn btn--ghost" type="button">
-                Show Gemini payload
-              </button>
-              <button id="generate" class="btn btn--primary" type="button">Generate quiz</button>
+              <button id="view-switch" class="btn btn--primary" type="button">Generate quiz</button>
             </div>
           </header>
+        </div>
+
+        <!-- The conversation panel. Visible in the transcript view and the generate
+             view, which is what lets the topics area and the saved quizzes stay put
+             while the settings form comes and goes inside it. -->
+        <article class="session" id="session" hidden>
           <section class="prompt-card">
-            <!-- Built from compat.quizCapabilities(), so no bound or label is duplicated
-                 here. The visual container is unchanged. -->
+            <!-- Panel output: the topic list, the dropzone, the saved quizzes, and
+                 the settings form when the generate view is open. -->
             <div id="settings"></div>
             <div class="prompt-card__foot">
               <span>Uses the selected transcript · secrets are redacted before sending</span>
               <span id="prompt-count"></span>
             </div>
+            <!-- Generate view only. The wrapper is unstyled so [hidden] can hide it;
+                 .settings__actions sets a display and would win that race. -->
+            <div id="generate-actions" hidden>
+              <div class="settings__actions">
+                <!-- Reads "Generate", never "Generate quiz": that is the header button's
+                     string, and two buttons with one label and different jobs is how the
+                     wrong one gets pressed. -->
+                <button id="generate" class="btn btn--primary settings__go" type="button">Generate</button>
+                <button id="show-payload" class="btn btn--ghost" type="button">Show Gemini payload</button>
+                <span class="settings__hint" id="generate-hint">One model call per topic. Usually under a minute.</span>
+              </div>
+            </div>
           </section>
+
+          <!-- The Gemini payload is part of the generate view, not a fourth pane: it
+               sits inside the panel article, so nothing can raise it from the transcript
+               and nothing has to remember to lower it. -->
+          <section class="payload" id="payload-view" hidden>
+            <header class="session__head">
+              <div class="session__titles">
+                <h2 class="session__title">Gemini payload</h2>
+                <p class="session__sub" id="payload-sub"></p>
+              </div>
+              <button id="close-payload" class="btn" type="button">Close</button>
+            </header>
+            <pre class="payload__json" id="payload-json"></pre>
+          </section>
+
           <div id="staleness"></div>
-          <div class="session__messages" id="messages"></div>
+          <!-- The transcript is the transcript view and nothing else. -->
+          <div id="transcript">
+            <div class="session__messages" id="messages"></div>
+          </div>
         </article>
 
         <article class="quiz" id="quiz" hidden>
@@ -90,20 +131,10 @@
               <h2 class="session__title" id="quiz-title"></h2>
               <p class="session__sub" id="quiz-description"></p>
             </div>
-            <button id="restart-quiz" class="btn btn--ghost" type="button">Back to conversation</button>
+            <!-- No back button here on purpose. In the quiz view the header above
+                 already says "View transcript", and two of them would be one too many. -->
           </header>
           <div id="quiz-body"></div>
-        </article>
-
-        <article class="payload" id="payload-view" hidden>
-          <header class="session__head">
-            <div class="session__titles">
-              <h2 class="session__title">Gemini payload</h2>
-              <p class="session__sub" id="payload-sub"></p>
-            </div>
-            <button id="close-payload" class="btn" type="button">Close</button>
-          </header>
-          <pre class="payload__json" id="payload-json"></pre>
         </article>
       </main>
     </div>

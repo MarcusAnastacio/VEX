@@ -8,6 +8,7 @@
 
 import { contentToParts, contentToText } from '../lib/text.js';
 import { finalizeSession, makeMessage, toEpochMs } from '../lib/normalize.js';
+import { SESSION_PARENT_FIELDS, isSubagentName } from '../lib/grouping.js';
 import { readVscodeChatLog } from './json.js';
 
 /** Parse a JSONL blob, ignoring lines that are not valid JSON. */
@@ -95,6 +96,8 @@ function extractPi(records) {
   let cwd;
   let started;
   let nativeId;
+  let parentSessionId;
+  let isSubagent = false;
   const messages = [];
 
   for (const r of records) {
@@ -102,6 +105,25 @@ function extractPi(records) {
       cwd = r.cwd;
       nativeId = r.id;
       started = toEpochMs(r.timestamp);
+      // The `{"type":"session"}` header is the one place this family records a
+      // SESSION-level parent. Everything after it carries `parentId`, but that links
+      // each event to the event above it and says nothing about which session spawned
+      // this one, so reading it here would invent a hierarchy out of a message DAG.
+      // prime's header has the field; pi, omp, senpi, kimchi and gjc omit it.
+      for (const field of SESSION_PARENT_FIELDS) {
+        if (r[field] != null) {
+          parentSessionId = r[field];
+          break;
+        }
+      }
+      continue;
+    }
+    if (r?.type === 'session_info') {
+      // `subagent-worker-<runId>-1` or `subagent-researcher-<runId>-1` is a Pi
+      // subagent, stated outright. It proves the fact on its own and carries no parent
+      // session id, so it is used for the flag only. The `parentId` on this same record
+      // is the event DAG and is deliberately not read.
+      if (isSubagentName(r.name)) isSubagent = true;
       continue;
     }
     if (r?.type !== 'message' || !r.message) continue;
@@ -111,7 +133,7 @@ function extractPi(records) {
       makeMessage({ role: r.message.role, text, thinkingChars, ts: toEpochMs(r.timestamp), tools }),
     );
   }
-  return { cwd, nativeId, started, messages };
+  return { cwd, nativeId, parentSessionId, isSubagent, started, messages };
 }
 
 function extractClaude(records) {
@@ -267,6 +289,7 @@ function extractGeneric(records) {
   const messages = [];
   let cwd;
   let nativeId;
+  let isSubagent = false;
 
   for (const r of records) {
     if (!r || typeof r !== 'object') {
@@ -279,6 +302,10 @@ function extractGeneric(records) {
     if (!nativeId) {
       nativeId = r.sessionId || r.session_id || p.sessionId || p.id || r.conversation_id || r.id;
     }
+    // A subagent transcript that lost its `{"type":"session"}` header lands here
+    // instead of in extractPi, and the `subagent-` name survives that. It names the
+    // RUN, not the parent session, so it sets the flag and nothing else.
+    if (!isSubagent && (isSubagentName(r.name) || isSubagentName(p.name))) isSubagent = true;
 
     // Skip records that announce themselves as non-conversation.
     const t = String(r.type || p.type || '').toLowerCase();
@@ -300,7 +327,7 @@ function extractGeneric(records) {
     if (!text && !tools?.length) continue;
     messages.push(makeMessage({ role, text, thinkingChars, ts: toEpochMs(r.timestamp || r.ts || r.created_at || p.timestamp), tools }));
   }
-  return { cwd, nativeId, messages };
+  return { cwd, nativeId, isSubagent, messages };
 }
 
 /**

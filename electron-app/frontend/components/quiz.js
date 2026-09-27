@@ -6,6 +6,8 @@
 // What it receives is a STEP from lib/quiz-view.js, never a raw question. It branches on
 // `kind` and on the `status` a result was mapped to, and nothing else.
 
+import { seededRandom } from '../lib/quiz-view.js';
+
 const h = (tag, props = {}, ...children) => {
   const node = document.createElement(tag);
   for (const [key, value] of Object.entries(props)) {
@@ -61,25 +63,72 @@ const formatScore = (n) => {
 /** "Gap 1" from "blank_1", so the code below never has to explain the keys. */
 const gapName = (key, index) => `Gap ${String(key || '').match(/(\d+)/)?.[1] ?? index + 1}`;
 
-/** Render one step into `container`, reporting the response through `onRespond`. */
-export function renderStep(container, { step, result, onRespond = () => {}, onNext, isLast } = {}) {
+/** Render one step into `container`, reporting the response through `onRespond`.
+ *
+ * `onSkip` and `onRetryStep` are optional and additive: without them the strip is not
+ * drawn and the step behaves exactly as before. `onRetryStep` only appears once a
+ * result exists, because there is nothing to retry before an answer.
+ */
+export function renderStep(container, { step, result, onRespond = () => {}, onNext, onSkip, onRetryStep, isLast } = {}) {
   container.replaceChildren();
   if (!step) return;
   if (step.id) SEEN.set(step.id, step);
 
   if (step.kind === 'flashcard') {
     container.append(flashcard(step, { onNext, isLast }));
-    return;
+  } else {
+    const card = h('section', { class: 'question-card' });
+    card.append(cardHead(step, step.kind === 'cloze' && step.language ? chip(step.language) : null));
+
+    if (step.kind === 'mcq') card.append(mcq(step, { result, onRespond, onNext, isLast }));
+    else if (step.kind === 'cloze') card.append(cloze(step, { result, onRespond, onNext, isLast }));
+    else card.append(open(step, { result, onRespond, onNext, isLast }));
+
+    container.append(card);
   }
 
-  const card = h('section', { class: 'question-card' });
-  card.append(cardHead(step, step.kind === 'cloze' && step.language ? chip(step.language) : null));
+  const nav = stepNav({ step, result, onSkip, onRetryStep, isLast });
+  if (nav) container.append(nav);
+}
 
-  if (step.kind === 'mcq') card.append(mcq(step, { result, onRespond, onNext, isLast }));
-  else if (step.kind === 'cloze') card.append(cloze(step, { result, onRespond, onNext, isLast }));
-  else card.append(open(step, { result, onRespond, onNext, isLast }));
+/**
+ * Skip and retry, the two moves that are not answering.
+ *
+ * Skip records nothing: the step is left unanswered, and an unanswered question does not
+ * count against the score, so the denominator shrinks instead of the mark dropping. That
+ * is the whole reason skip is worth having next to a wrong answer, and the hint says so,
+ * because "skip" reads as evasion everywhere else.
+ *
+ * Retry is offered only on a step that has already been graded, and clears this step's
+ * response so the same question can be answered again. It is per question. The whole
+ * quiz restart is a different button on the results card and stays there.
+ *
+ * Skip is hidden on the last step, where it would be a second route to the results card
+ * that the feedback button already offers.
+ */
+function stepNav({ step, result, onSkip, onRetryStep, isLast }) {
+  if (!onSkip && !onRetryStep) return null;
 
-  container.append(card);
+  const row = h('div', { class: 'quiz-nav' });
+  if (onRetryStep && result) {
+    row.append(h('button', {
+      class: 'btn btn--ghost quiz-nav__retry',
+      type: 'button',
+      text: 'Answer again',
+      onclick: onRetryStep,
+    }));
+  }
+  if (onSkip && !isLast) {
+    row.append(h('button', {
+      class: 'btn btn--ghost quiz-nav__skip',
+      type: 'button',
+      text: step?.kind === 'flashcard' ? 'Skip card' : 'Skip question',
+      onclick: onSkip,
+    }));
+  }
+  if (!row.childElementCount) return null;
+  row.append(h('span', { class: 'quiz-nav__hint', text: 'A skipped question is not marked against you' }));
+  return row;
 }
 
 /** The strip at the top of every card: what kind of thing this is, and what it is about. */
@@ -366,16 +415,22 @@ function feedback(result, { onNext, isLast, extra = [] }) {
  * Wording comes from the band the backend chose, so the four thresholds and their copy
  * are defined once. `tone` is exposed as a class so the colour can be styled without
  * knowing which band produced it.
+ *
+ * The confetti is part of this, not a wrapper around it: the celebration has to be drawn
+ * on the same pass that draws the score, or the result appears first and the reaction
+ * lands a frame later, which reads as lag.
  */
 export function renderResults(container, { summary, attempt, onBack, onRetry } = {}) {
   container.replaceChildren();
   const band = summary?.band;
   const total = Number(summary?.total ?? 0);
   const percentage = Math.max(0, Math.min(100, Number(summary?.percentage ?? 0)));
+  const bits = confettiCount(percentage, total);
 
   const card = h(
     'section',
-    { class: `result-card${band ? ` result-card--${band.tone}` : ''}` },
+    { class: `result-card result-card--celebrate${band ? ` result-card--${band.tone}` : ''}` },
+    confetti(bits, percentage),
     h('div', { class: 'result-card__top' },
       h('span', { class: 'result-card__eyebrow', text: 'Your score' }),
       h('span', { class: 'result-card__percent', text: total > 0 ? `${Math.round(percentage)}%` : 'not scored' }),
@@ -404,6 +459,60 @@ function meter(percentage) {
   return h('div', { class: 'meter' },
     h('span', { class: 'meter__fill', style: `width: ${percentage}%` }),
   );
+}
+
+// ── Confetti ──────────────────────────────────────────────────────────────
+
+/** A low score still gets a nod. Zero marks still means you finished something. */
+const CONFETTI_MIN = 16;
+/** A perfect run gets the full storm. */
+const CONFETTI_MAX = 96;
+/** Five tints, cycled, so the burst is not a single block of one colour. */
+const CONFETTI_TINTS = ['a', 'b', 'c', 'd', 'e'];
+
+/**
+ * How many pieces to drop, from the score.
+ *
+ * Linear in the percentage between a floor and a ceiling, and never below the floor,
+ * including when there is nothing to score at all: the screen that celebrates finishing
+ * is the same screen that reports a bad result, so the reaction cannot be conditional on
+ * the result being good.
+ */
+function confettiCount(percentage, total) {
+  if (!(total > 0)) return CONFETTI_MIN;
+  return CONFETTI_MIN + Math.round((Math.max(0, Math.min(100, percentage)) / 100) * (CONFETTI_MAX - CONFETTI_MIN));
+}
+
+/**
+ * The pieces themselves.
+ *
+ * DOM and CSS only, no canvas and no library: a few absolutely positioned spans, each
+ * with its own fall duration, delay, drift and spin handed over as custom properties, so
+ * the animation itself stays in the stylesheet and this function only decides how many
+ * and where. Seeded from the score, so the same result draws the same burst and a
+ * screenshot is comparable between runs.
+ *
+ * `aria-hidden`, because a decorative celebration is not content and a screen reader
+ * announcing 96 spans of nothing is worse than no celebration.
+ */
+function confetti(count, percentage) {
+  const random = seededRandom(`confetti-${percentage}`);
+  const layer = h('div', { class: 'confetti', 'aria-hidden': 'true' });
+  for (let i = 0; i < count; i += 1) {
+    layer.append(
+      h('span', {
+        class: `confetti__bit confetti__bit--${CONFETTI_TINTS[i % CONFETTI_TINTS.length]}`,
+        style: [
+          `--x: ${(random() * 100).toFixed(2)}%`,
+          `--drift: ${((random() - 0.5) * 90).toFixed(1)}px`,
+          `--spin: ${Math.round(180 + random() * 900)}deg`,
+          `--delay: ${(random() * 0.55).toFixed(3)}s`,
+          `--fall: ${(1.7 + random() * 1.9).toFixed(2)}s`,
+        ].join('; '),
+      }),
+    );
+  }
+  return layer;
 }
 
 /**

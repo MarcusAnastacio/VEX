@@ -19,6 +19,7 @@
 import { deriveTopics, topicSlice } from './topics.js';
 import { generateJson, hasApiKey, DEFAULT_MODEL_CHAIN } from './gemini.js';
 import { redact } from './redact.js';
+import { mockEnabled, mockTopicResponse, MOCK_MODEL, MOCK_USAGE } from './mock.js';
 
 export const QUESTION_TYPES = ['mcq', 'cloze', 'open'];
 
@@ -117,8 +118,24 @@ export const DEFAULTS = {
   questionCount: 6,
   /** Any combination of QUESTION_TYPES, including none (flashcards only). */
   types: ['mcq', 'cloze', 'open'],
-  /** Flashcards per topic. The product fixes this at 2. */
+  /**
+   * Flashcards per topic.
+   *
+   * This used to be fixed at 2, and it was called "the product fixes this" in a
+   * comment as though nobody would ever want more. The bounds live in
+   * FLASHCARDS_PER_TOPIC so the control, the planner and the generator cannot
+   * disagree, and so `quizCapabilities()` can hand the UI the exact range to render.
+   */
   flashcardsPerTopic: 2,
+  /**
+   * Optional topic ids to quiz on, from the topic list the user picked in the panel.
+   *
+   * Absent or empty means today's behaviour: choose automatically. A non-empty list
+   * narrows generation to those topics, and a list longer than the question count
+   * needs is sampled down randomly rather than silently truncated in order, so
+   * re-running does not always produce the same subset.
+   */
+  topicIds: [],
   /** Chars of conversation sent per topic. */
   maxCharsPerTopic: 12000,
   /** Upper bound on topics considered, independent of the question count. */
@@ -133,6 +150,31 @@ export const DEFAULTS = {
    */
   focus: '',
 };
+
+/**
+ * The flashcards-per-topic control's bounds.
+ *
+ * One is a floor because a topic with no card teaches nothing before the questions,
+ * and the per-topic character floor in READINESS was chosen on the assumption of a
+ * couple of cards. The ceiling is bounded rather than open because every extra card
+ * is another model call's worth of material the user then has to read, and past a
+ * handful the deck stops being a warm-up and becomes the quiz.
+ */
+export const FLASHCARDS_PER_TOPIC = { min: 1, max: 8, default: DEFAULTS.flashcardsPerTopic, step: 1 };
+
+/**
+ * Clamp a requested flashcard count into the range the control offers.
+ *
+ * Everything downstream trusts this value: the prompt tells the model to produce
+ * exactly that many, `expectedFlashcards` multiplies by it, and `settingsKey` folds it
+ * in so a different count is a different quiz. An out-of-range number reaching any
+ * of those is a deck that does not match its own plan.
+ */
+export function clampFlashcardsPerTopic(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return FLASHCARDS_PER_TOPIC.default;
+  return Math.max(FLASHCARDS_PER_TOPIC.min, Math.min(FLASHCARDS_PER_TOPIC.max, Math.round(n)));
+}
 
 /**
  * The end-of-quiz band, in quartiles.
@@ -285,6 +327,13 @@ export function quizCapabilities() {
     flashcards: {
       always: true,
       perTopic: DEFAULTS.flashcardsPerTopic,
+      // The range for the flashcards-per-question control, flattened onto the same
+      // object the UI already reads `perTopic` from, so adding a control needs no new
+      // channel and no second capabilities key.
+      min: FLASHCARDS_PER_TOPIC.min,
+      max: FLASHCARDS_PER_TOPIC.max,
+      default: FLASHCARDS_PER_TOPIC.default,
+      step: FLASHCARDS_PER_TOPIC.step,
       note: 'Shown before the questions. Every selected topic produces this many, even when no question types are enabled.',
     },
     topics: {
@@ -342,6 +391,7 @@ function shuffle(items, seed) {
 export function planQuiz(session, options = {}) {
   const opts = { ...DEFAULTS, ...options };
   const types = [...new Set((opts.types || []).filter((t) => QUESTION_TYPES.includes(t)))];
+  const flashcardsPerTopic = clampFlashcardsPerTopic(opts.flashcardsPerTopic);
 
   const requested = types.length === 0 ? 0 : Math.max(0, Math.floor(opts.questionCount));
   const topicsNeeded = types.length === 0 ? 1 : Math.max(1, Math.ceil(requested / types.length));
@@ -354,12 +404,31 @@ export function planQuiz(session, options = {}) {
   const fromMessage = Number.isFinite(opts.fromMessage) ? Math.max(0, opts.fromMessage) : 0;
   const allTopics = fromMessage > 0 ? allTopicsRaw.filter((t) => t.from >= fromMessage) : allTopicsRaw;
 
+  // Which topics the user picked, if any. An absent or empty list keeps the automatic
+  // selection below untouched, which is the whole contract: the panel only sends this
+  // once a topic has actually been chosen.
+  const wantedIds = (Array.isArray(opts.topicIds) ? opts.topicIds : [])
+    .map((id) => String(id))
+    .filter((id) => id);
+  const wanted = new Set(wantedIds);
+  const selection = wantedIds.length > 0;
+
   // Drop topics too thin to carry a question. Without this a session of "hi" produced
   // a flashcard and a multiple-choice question about nothing in particular.
   const typeCount = Math.max(1, types.length);
   const floor = Math.max(READINESS.minTopicChars, typeCount * READINESS.charsPerQuestionType);
-  const topics = allTopics.filter((t) => t.chars >= floor && t.exchanges >= READINESS.minTopicExchanges);
-  const droppedThin = allTopics.length - topics.length;
+  const usable = allTopics.filter((t) => t.chars >= floor && t.exchanges >= READINESS.minTopicExchanges);
+
+  // Narrow to the picked topics only AFTER the thin filter, so an id for a topic that
+  // could not carry a question is reported as unavailable rather than silently
+  // answering with the next one.
+  const chosen = selection ? usable.filter((t) => wanted.has(String(t.id))) : usable;
+  const topics = chosen;
+  const droppedThin = allTopics.length - usable.length;
+
+  // Ids the panel sent that no usable topic carries. Surfaced rather than swallowed:
+  // a stale selection should say so instead of quietly generating something else.
+  const unknownTopicIds = selection ? wantedIds.filter((id) => !topics.some((t) => String(t.id) === id)) : [];
 
   const readiness = assessReadiness(session, { types, topics: allTopics });
   if (topics.length === 0) {
@@ -374,6 +443,8 @@ export function planQuiz(session, options = {}) {
       requestedQuestions: requested,
       shortfall: requested,
       requestedTopics: topicsNeeded,
+      requestedTopicIds: wantedIds,
+      unknownTopicIds,
       selectedTopics: [],
       deck: [],
       expectedQuestions: 0,
@@ -390,11 +461,20 @@ export function planQuiz(session, options = {}) {
 
   // Random subset, unless a seed was given. "Random" is deliberate: regenerating a
   // quiz from the same long session should give a different set of questions rather
-  // than the same first three topics every time.
+  // than the same first three topics every time. It is also what handles a long
+  // explicit selection: asking for a subset of the topics the user ticked is a
+  // sample, not a truncation, so the same ten picks do not always yield the same
+  // three topics.
   const ordered = shuffle(topics, opts.seed);
   const selected = ordered.slice(0, Math.min(topicsNeeded, topics.length));
   // Back to chronological order so the deck reads in the order things happened.
   selected.sort((a, b) => a.from - b.from);
+
+  // What the pick cost, so the panel can say "6 of your 10 topics" rather than
+  // implying the other four do not exist.
+  const droppedTopicIds = selection
+    ? chosen.filter((t) => !selected.includes(t)).map((t) => String(t.id))
+    : [];
 
   // Assign one question per (topic, type) pair, cycling types across topics so the
   // question mix is even. A pair is never requested twice: asking a topic for two
@@ -415,12 +495,18 @@ export function planQuiz(session, options = {}) {
     plan: {
       questionCount,
       types,
-      flashcardsPerTopic: opts.flashcardsPerTopic,
+      flashcardsPerTopic,
       maxCharsPerTopic: opts.maxCharsPerTopic,
     },
     types,
     questionCount,
     requestedTopics: topicsNeeded,
+    /** The ids the panel asked for. Empty means the selection was automatic. */
+    requestedTopicIds: wantedIds,
+    /** Ids that asked for but no usable topic carries. */
+    unknownTopicIds,
+    /** Picked topics left out by the sample. */
+    droppedTopicIds,
     selectedTopics: selected.map((t) => ({
       id: t.id,
       label: t.label,
@@ -433,7 +519,7 @@ export function planQuiz(session, options = {}) {
     topicStats,
     /** How many questions the plan will actually produce, after rounding. */
     expectedQuestions: deck.reduce((n, d) => n + d.types.length, 0),
-    expectedFlashcards: deck.length * opts.flashcardsPerTopic,
+    expectedFlashcards: deck.length * flashcardsPerTopic,
     /** The user's ask before it was capped by the available topics. */
     requestedQuestions: requested,
     /**
@@ -795,6 +881,16 @@ export async function generateQuiz(session, options = {}) {
   const schema = quizSchema({ types: plan.types, flashcardsPerTopic: opts.flashcardsPerTopic });
   const topicsById = new Map(deriveTopics(session, { maxTopics: opts.maxTopics }).topics.map((t) => [t.id, t]));
 
+  // ONE switch, read here, applied at the single place a model response is obtained.
+  //
+  // It replaces the network call and nothing else. The topic still comes from the
+  // plan, the slice is still built and redacted, the response is still run through
+  // validateResult, and the assembly below is untouched, so turning the mock on
+  // exercises the same path the real Generate button takes rather than a shortcut
+  // beside it. `AGENT_QUIZ_MOCK` is a property of the process, not a request field,
+  // so nothing in the renderer can turn it on.
+  const useMock = mockEnabled(opts.env ?? process.env);
+
   const startedAt = Date.now();
   const perTopic = await Promise.all(
     plan.deck.map(async (slot, index) => {
@@ -832,15 +928,24 @@ export async function generateQuiz(session, options = {}) {
 
       opts.onProgress?.({ phase: 'topic-start', index, topicId: topic.id, label: topic.label, sliceChars: slice.chars });
       try {
-        const { data, model, usage, attempts } = await generateJson({
-          prompt,
-          schema,
-          models: opts.models,
-          apiKey: opts.apiKey,
-          temperature: opts.temperature,
-          signal: opts.signal,
-          onAttempt: (a) => opts.onProgress?.({ phase: 'attempt', ...a, topicId: topic.id }),
-        });
+        // From here to `validated` is the real path. Only the source of `data` differs.
+        const produced = useMock
+          ? {
+              data: mockTopicResponse({ topic, types: slot.types, flashcardsPerTopic: opts.flashcardsPerTopic }),
+              model: MOCK_MODEL,
+              usage: MOCK_USAGE,
+              attempts: [{ ok: true, model: MOCK_MODEL, mock: true }],
+            }
+          : await generateJson({
+              prompt,
+              schema,
+              models: opts.models,
+              apiKey: opts.apiKey,
+              temperature: opts.temperature,
+              signal: opts.signal,
+              onAttempt: (a) => opts.onProgress?.({ phase: 'attempt', ...a, topicId: topic.id }),
+            });
+        const { data, model, usage, attempts } = produced;
         const validated = validateResult(data, { topic, types: slot.types, turnRange: [topic.from, topic.to] });
         opts.onProgress?.({
           phase: 'topic-done',
@@ -906,6 +1011,8 @@ export async function generateQuiz(session, options = {}) {
       types: plan.types,
       flashcardsPerTopic: plan.plan.flashcardsPerTopic,
     },
+    /** True when this quiz came from the mock rather than from Gemini. */
+    mock: useMock,
     topicsUsed: plan.selectedTopics,
     topicStats: plan.topicStats,
     redaction,

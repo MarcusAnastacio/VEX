@@ -299,7 +299,7 @@
   background: var(--q-ok-wash);
 }
 .option--correct .option__letter {
-  color: #0d1017;
+  color: var(--bg);
   background: var(--q-ok);
 }
 .option--correct .option__note {
@@ -310,7 +310,7 @@
   background: var(--q-bad-wash);
 }
 .option--wrong .option__letter {
-  color: #180f11;
+  color: var(--bg);
   background: var(--q-bad);
 }
 .option--wrong .option__note {
@@ -626,12 +626,53 @@
   font-weight: 700;
 }
 
+/* ── Skip and retry ─────────────────────────────────────────────────────── */
+
+/* Below the card, not inside it: the card belongs to the question, and a mistake made
+ * while answering should not cost the place on screen where the answer is read. */
+.quiz-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.quiz-nav .btn {
+  padding: 7px 13px;
+  font-size: 12px;
+}
+.quiz-nav__hint {
+  color: var(--text-faint);
+  font-size: 11.5px;
+}
+
 /* ── Results ─────────────────────────────────────────────────────────────── */
 
 .result-card {
+  position: relative;
   padding: 32px 30px 28px;
+  overflow: hidden;
   text-align: center;
   animation: q-rise 260ms ease-out;
+}
+/* The confetti layer is a sibling of the score, not a parent, so the card's own
+ * centring and stacking stay exactly as they were. */
+.result-card > *:not(.confetti) {
+  position: relative;
+}
+/* The glow behind the score. accent-soft rather than a new colour, so the theme pass
+ * moves the celebration along with the rest of the accent surface. */
+.result-card--celebrate::before {
+  position: absolute;
+  top: -120px;
+  left: 50%;
+  width: 460px;
+  height: 340px;
+  background: radial-gradient(closest-side, var(--accent-soft), transparent);
+  content: '';
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: q-glow 1400ms ease-out;
 }
 .result-card__top {
   display: flex;
@@ -721,7 +762,7 @@
 .result-card--low .meter__fill {
   background: var(--q-bad);
 }
-.result-card--low .result-card--mid {
+.result-card--mid {
   border-top: 2px solid var(--q-warn);
 }
 .result-card--mid .result-card__score {
@@ -730,13 +771,13 @@
 .result-card--mid .meter__fill {
   background: var(--q-warn);
 }
-.result-card--mid .result-card--good {
+.result-card--good {
   border-top: 2px solid var(--accent);
 }
 .result-card--good .meter__fill {
   background: var(--accent);
 }
-.result-card--good .result-card--high {
+.result-card--high {
   border-top: 2px solid var(--q-ok);
 }
 .result-card--high .result-card__score {
@@ -745,7 +786,82 @@
 .result-card--high .meter__fill {
   background: var(--q-ok);
 }
-.result-card--high 
+
+/* ── Confetti ────────────────────────────────────────────────────────────── */
+
+/* Each bit is a span with its position, drift, spin, delay and fall time handed in as
+ * custom properties by components/quiz.js, so the whole motion is here and the script
+ * only counts. Five tints cycled from tokens already in use on this surface; a new
+ * palette here would be one more thing the theme pass has to find. */
+.confetti {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.confetti__bit {
+  position: absolute;
+  top: -16px;
+  left: var(--x);
+  width: 7px;
+  height: 11px;
+  background: var(--accent);
+  border-radius: 1px;
+  opacity: 0;
+  animation: q-fall var(--fall) var(--delay) cubic-bezier(0.35, 0.1, 0.55, 1) forwards;
+}
+.confetti__bit--a {
+  background: var(--accent);
+}
+.confetti__bit--b {
+  background: var(--q-ok);
+}
+.confetti__bit--c {
+  background: var(--q-warn);
+}
+.confetti__bit--d {
+  background: var(--assistant);
+}
+.confetti__bit--e {
+  background: var(--text-dim);
+}
+/* Squares and slivers. A flat rectangle every time reads as a spreadsheet. */
+.confetti__bit--b,
+.confetti__bit--e {
+  width: 5px;
+  height: 13px;
+  border-radius: 3px;
+}
+.confetti__bit--c,
+.confetti__bit--d {
+  width: 9px;
+  height: 7px;
+  border-radius: 2px;
+}
+@keyframes q-fall {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  10% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--drift), 118%, 0) rotate(var(--spin));
+  }
+}
+@keyframes q-glow {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+}
 /* ── The breakdown, the part that makes the score mean something ──────────── */
 
 .breakdown-wrap {
@@ -851,12 +967,22 @@
   .feedback,
   .flashcard__back,
   .result-card,
+  .result-card--celebrate::before,
   .meter__fill {
     animation: none;
   }
   .option,
   .flashcard--revealed .question__prompt {
     transition: none;
+  }
+  /* The celebration still has to happen for someone who asked for less motion, so the
+   * bits stop falling and sit as a static scatter instead of vanishing. */
+  .confetti__bit {
+    top: 10%;
+    left: var(--x);
+    opacity: 0.35;
+    animation: none;
+    transform: rotate(var(--spin));
   }
 }
 
@@ -900,6 +1026,16 @@
   .result-card__actions .btn {
     width: 100%;
     padding: 9px 12px;
+  }
+  .result-card--celebrate::before {
+    width: 300px;
+    height: 240px;
+  }
+  .quiz-nav {
+    gap: 6px;
+  }
+  .quiz-nav__hint {
+    width: 100%;
   }
   .blanks__row {
     flex-wrap: wrap;
