@@ -67,7 +67,9 @@ const el = {
   messages: document.getElementById('messages'),
   quiz: document.getElementById('quiz'),
   quizKicker: document.getElementById('quiz-progress'),
-  quizTitle: document.getElementById('quiz-title'),
+  // No quizTitle. The quiz pane has no heading of its own: the header above names the
+  // conversation in every view, and a quiz is titled with its session's title, so the
+  // pane's heading could only ever be that same string a second time.
   quizDescription: document.getElementById('quiz-description'),
   quizBody: document.getElementById('quiz-body'),
   payloadView: document.getElementById('payload-view'),
@@ -159,7 +161,10 @@ function render() {
       onRegenerate: () => generate(),
     });
 
-    el.promptCount.textContent = s.plan?.plan
+    // The count is a promise about a deck, so it belongs to the view that asks for one.
+    // The redaction notice beside it stays in both views: that line is about the
+    // transcript on screen, and the transcript is what gets sent.
+    el.promptCount.textContent = view === 'generate' && s.plan?.plan
       ? `${s.plan.expectedQuestions} questions from ${(s.plan.selectedTopics || []).length} topics`
       : '';
     // Never the backend's button label. That string describes what generating would do
@@ -537,7 +542,8 @@ function renderCurrentStep() {
   if (!step) {
     const summary = summarize(s.attempt, { band: s.band });
     el.quizKicker.textContent = 'QUIZ COMPLETE';
-    el.quizTitle.textContent = s.quiz?.title || 'Your quiz';
+    // Nothing to title: the pane has no heading, and the header above is still naming
+    // the conversation this quiz was built from.
     el.quizDescription.textContent = '';
     renderResults(el.quizBody, {
       summary,
@@ -552,7 +558,8 @@ function renderCurrentStep() {
   // a global stepIndex put the last card at "FLASHCARD 5 OF 9" and the first question
   // at "QUESTION 1 OF 9", both of which are true of neither phase.
   el.quizKicker.textContent = stepLabel(step, steps);
-  el.quizTitle.textContent = s.quiz?.title || 'Your quiz';
+  // The one thing the header above cannot say about this step: which topic it came
+  // from. There is no title line here, because it only ever repeated the header.
   el.quizDescription.textContent = step.topicLabel || '';
 
   const advance = () => {

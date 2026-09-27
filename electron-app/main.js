@@ -48,6 +48,12 @@ if (process.env.COMPAT_SCREENSHOT) {
 
 const FRONTEND_DIR = path.join(__dirname, 'frontend');
 
+// Window/app icon. Rasterised from frontend/assets/icon.svg, which is the source of
+// truth; the PNGs sit next to it so nothing has to rasterise an SVG at runtime.
+// Guarded by existsSync because a window icon is cosmetic: a missing file must warn,
+// not stop the app (or the offscreen screenshot harness) from starting.
+const ICON_PNG = path.join(FRONTEND_DIR, 'assets', 'icon.png');
+
 // The frontend is served from a custom `app://` scheme instead of `file://`.
 //
 // Why this is necessary rather than cosmetic: a `file://` page has a null origin,
@@ -123,6 +129,7 @@ async function bootstrap() {
     minHeight: 600,
     backgroundColor: '#12141a',
     title: 'Agent Quiz',
+    icon: fs.existsSync(ICON_PNG) ? ICON_PNG : undefined,
     // Created hidden, then shown with showInactive() below, so launching the app does not
     // pull focus away from whatever the user is actually typing in.
     show: false,

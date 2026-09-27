@@ -22,18 +22,18 @@
   border-right: 1px solid var(--border);
 }
 .sidebar__head {
-  padding: 16px 16px 10px;
+  padding: 14px 14px 9px;
 }
 .sidebar__title {
   margin: 0;
-  font-size: 14px;
+  font-size: clamp(15px, 0.5vw + 13px, 18px);
   font-weight: 700;
   letter-spacing: 0.1px;
 }
 .sidebar__meta {
   margin: 4px 0 0;
   color: var(--text-faint);
-  font-size: 11.5px;
+  font-size: 12.5px;
 }
 .sidebar__search {
   padding: 0 12px 10px;
@@ -46,7 +46,7 @@
   border: 1px solid var(--border);
   border-radius: 8px;
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   outline: none;
   transition: border-color 0.12s, box-shadow 0.12s, background 0.12s;
 }
@@ -63,7 +63,7 @@
     center / contain no-repeat;
 }
 .sidebar__search input:hover {
-  border-color: #313846;
+  border-color: var(--border-strong);
 }
 .sidebar__search input::placeholder {
   color: var(--text-faint);
@@ -95,9 +95,9 @@
   margin: 0 0 8px;
   padding: 6px 9px;
   color: var(--text-faint);
-  font-size: 11.5px;
+  font-size: 12.5px;
   background: var(--bg-raised);
-  border: 1px solid var(--border-soft);
+  border: 1px solid var(--border);
   border-radius: 8px;
 }
 .listbar--busy {
@@ -143,7 +143,7 @@
 .skeleton__line {
   height: 9px;
   border-radius: 4px;
-  background: linear-gradient(90deg, #1b1f28 0%, #232833 50%, #1b1f28 100%);
+  background: linear-gradient(90deg, var(--skeleton) 0%, var(--bg-active) 50%, var(--skeleton) 100%);
   background-size: 240% 100%;
   animation: sb-shimmer 1.4s ease-in-out infinite;
 }
@@ -156,7 +156,7 @@
   to { background-position: -120% 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .skeleton__line { animation: none; background: #1b1f28; }
+  .skeleton__line { animation: none; background: var(--skeleton); }
 }
 
 /* ── Sections ──────────────────────────────────────────────────────────────── */
@@ -173,7 +173,7 @@
   gap: 8px;
   padding: 10px 8px 6px;
   color: var(--text-faint);
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 700;
   letter-spacing: 0.8px;
   text-transform: uppercase;
@@ -191,7 +191,7 @@
   min-width: 18px;
   padding: 1px 6px;
   color: var(--text-faint);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0;
@@ -202,14 +202,14 @@
   border-radius: 20px;
 }
 .group--ready .group__count {
-  color: var(--accent);
+  color: var(--accent-strong);
   background: var(--accent-soft);
   border-color: transparent;
 }
 .group__note {
   margin: 0 8px 8px;
   color: var(--text-faint);
-  font-size: 11.5px;
+  font-size: 12.5px;
   line-height: 1.45;
 }
 
@@ -231,7 +231,7 @@
   align-items: center;
   gap: 6px;
   color: var(--text-faint);
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 700;
   letter-spacing: 0.8px;
   text-transform: uppercase;
@@ -240,7 +240,7 @@
 .split__count {
   min-width: 18px;
   padding: 1px 6px;
-  font-size: 10px;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0;
   text-align: center;
@@ -252,7 +252,7 @@
 .split__note {
   margin: 6px 8px 4px;
   color: var(--text-faint);
-  font-size: 11.5px;
+  font-size: 12.5px;
   line-height: 1.45;
 }
 
@@ -260,7 +260,7 @@
 .row {
   display: block;
   width: 100%;
-  padding: 9px 11px 9px 12px;
+  padding: 8px 10px;
   margin-bottom: var(--sb-gap);
   color: inherit;
   text-align: left;
@@ -274,14 +274,14 @@
 }
 .row:hover {
   background: var(--bg-hover);
-  border-color: #333a49;
+  border-color: var(--border-strong);
   transform: translateX(2px);
 }
 /* The one loud row. A left bar reads as "you are here" without a highlight colour
  * fighting the accent used for the ready badge. */
 .row[aria-current='true'] {
   background: var(--bg-active);
-  border-color: #3a4358;
+  border-color: var(--border-strong);
   box-shadow: inset 3px 0 0 var(--accent);
   transform: none;
 }
@@ -309,15 +309,17 @@
   white-space: nowrap;
   text-overflow: ellipsis;
   color: var(--text-dim);
-  font-size: 13.5px;
+  font-size: 14.5px;
   font-weight: 600;
   letter-spacing: -0.1px;
 }
 .row__pill {
   flex: 0 0 auto;
   padding: 1px 7px;
-  color: var(--accent);
-  font-size: 9.5px;
+  /* Strong, not plain accent: 10.5px type on the accent tint is 4.47:1 with the plain
+   * accent and 6.3:1 with this. */
+  color: var(--accent-strong);
+  font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.4px;
   text-transform: uppercase;
@@ -330,7 +332,13 @@
   gap: 5px;
   margin-top: 3px;
   color: var(--text-faint);
-  font-size: 11.5px;
+  font-size: 12.5px;
+}
+/* The faint tier is measured against the page, not against the hover and selected
+ * tints, so on those two the metadata steps up one grade rather than washing out. */
+.row:hover .row__meta,
+.row[aria-current='true'] .row__meta {
+  color: var(--text-dim);
 }
 .row__meta > span {
   overflow: hidden;
@@ -365,7 +373,7 @@
 }
 .row--ready .row__title {
   color: var(--text);
-  font-size: 14.5px;
+  font-size: 16px;
 }
 .row--ready:hover {
   border-color: var(--accent);
@@ -375,6 +383,103 @@
   cursor: default;
 }
 
+/* ── Subagents ───────────────────────────────────────────────────────────────
+ * A spawned conversation is real but secondary, so it renders inside its parent: one
+ * thread line down the left, a smaller card, and the count on the parent's own toggle.
+ * The whole subtree is `hidden` while collapsed - the rows are in the DOM, they simply
+ * take no space - so expanding is a repaint and never a re-fetch. */
+.subtree {
+  transition: transform 0.12s;
+}
+/* The card moves as one piece: the row, its toggle and its children are a single
+ * object, so the hover nudge is applied to the subtree rather than to the row alone. */
+.subtree:hover {
+  transform: translateX(2px);
+}
+.subtree .row:hover,
+.subtree .row[aria-current='true'] {
+  transform: none;
+}
+.subtree__kids {
+  margin-left: 14px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+}
+.subtree__kids[hidden] {
+  display: none;
+}
+/* A parent row and its toggle are one card: square corners where they meet, so the
+ * row's bottom border reads as the divider between the title and the control. */
+.row--parent {
+  margin-bottom: 0;
+  border-color: var(--border);
+  border-radius: var(--sb-card) var(--sb-card) 0 0;
+}
+.row--child {
+  padding: 6px 9px;
+  background: var(--bg-raised);
+  border-color: var(--border-soft);
+}
+.row--child .row__title {
+  color: var(--text-dim);
+  font-size: 13.5px;
+}
+.row--child.row--ready .row__title {
+  font-size: 14.5px;
+}
+/* The toggle is a sibling of the row button, not a control inside it: a button inside
+ * a button is not a thing a browser or a screen reader can reconcile. It carries the
+ * count and the state, and it is an ordinary tab stop. */
+.row__expander {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 100%;
+  margin-bottom: var(--sb-gap);
+  padding: 3px 10px 4px;
+  color: var(--text-faint);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-top: 0;
+  border-radius: 0 0 var(--sb-card) var(--sb-card);
+  cursor: pointer;
+  outline: none;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.row__expander:hover {
+  color: var(--text-dim);
+  background: var(--bg-hover);
+}
+.row__expander:focus-visible {
+  border-color: var(--accent);
+  box-shadow: var(--sb-ring);
+}
+.row__expander[aria-expanded='true'] {
+  color: var(--text-dim);
+  background: var(--bg-active);
+}
+/* A caret drawn in CSS: no icon font, no image, and it inherits the button's ink. */
+.row__caret {
+  width: 0;
+  height: 0;
+  border-top: 3.5px solid transparent;
+  border-bottom: 3.5px solid transparent;
+  border-left: 4.5px solid currentColor;
+  transition: transform 0.12s;
+}
+.row__expander[aria-expanded='true'] .row__caret {
+  transform: rotate(90deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .subtree,
+  .row__caret { transition: none; }
+}
+
 /* ── Empty states ────────────────────────────────────────────────────────────
  * Both explain what happened and offer the next move. Neither is a bare sentence in
  * the middle of an empty column. */
@@ -382,7 +487,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 30px 20px 24px;
+  padding: 24px 14px 18px;
   text-align: center;
 }
 .empty__mark {
@@ -420,14 +525,14 @@
 .empty__title {
   margin: 0;
   color: var(--text);
-  font-size: 14px;
+  font-size: clamp(15px, 0.5vw + 13px, 18px);
   font-weight: 700;
   letter-spacing: 0;
 }
 .empty__query {
   margin: 5px 0 0;
   color: var(--text-dim);
-  font-size: 12.5px;
+  font-size: 13.5px;
   font-weight: 600;
   overflow-wrap: anywhere;
 }
@@ -435,7 +540,7 @@
   margin: 8px 0 0;
   max-width: 26ch;
   color: var(--text-faint);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.5;
 }
 .empty__action {
@@ -443,7 +548,7 @@
   padding: 7px 14px;
   color: var(--text);
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   background: var(--bg-hover);
   border: 1px solid var(--border);
@@ -453,7 +558,7 @@
 }
 .empty__action:hover {
   background: var(--bg-active);
-  border-color: #3a4250;
+  border-color: var(--border-strong);
 }
 .empty__action:focus-visible {
   outline: none;
@@ -464,7 +569,7 @@
   margin: 12px 0 0;
   max-width: 26ch;
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
 }
 
@@ -473,7 +578,7 @@
 .placeholder {
   padding: 18px 12px;
   color: var(--text-faint);
-  font-size: 12px;
+  font-size: 13px;
   text-align: center;
 }
 .sidebar__foot {
@@ -487,8 +592,8 @@
   flex-basis: 100%;
   margin: 2px 0 0;
   color: var(--text-faint);
-  font-size: 10.5px;
-  min-height: 14px;
+  font-size: 11.5px;
+  min-height: 16px;
 }
 
 @media (max-width: 760px) {

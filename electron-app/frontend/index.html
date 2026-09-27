@@ -128,7 +128,13 @@
           <header class="session__head">
             <div class="session__titles">
               <div class="quiz__kicker" id="quiz-progress">QUESTION 1 OF 5</div>
-              <h2 class="session__title" id="quiz-title"></h2>
+              <!-- No heading here. The one header above already names the conversation
+                   in every view, and the backend titles a quiz with its session's title
+                   (backend/lib/quiz.js: `title: session.title`), so a second
+                   .session__title in this pane rendered the same string twice on one
+                   screen. What this pane owns instead is the two things the header
+                   cannot say: how far along you are (the kicker above) and which topic
+                   the step in front of you came from (the sub below). -->
               <p class="session__sub" id="quiz-description"></p>
             </div>
             <!-- No back button here on purpose. In the quiz view the header above

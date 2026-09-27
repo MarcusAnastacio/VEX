@@ -499,18 +499,22 @@ function confetti(count, percentage) {
   const random = seededRandom(`confetti-${percentage}`);
   const layer = h('div', { class: 'confetti', 'aria-hidden': 'true' });
   for (let i = 0; i < count; i += 1) {
-    layer.append(
-      h('span', {
-        class: `confetti__bit confetti__bit--${CONFETTI_TINTS[i % CONFETTI_TINTS.length]}`,
-        style: [
-          `--x: ${(random() * 100).toFixed(2)}%`,
-          `--drift: ${((random() - 0.5) * 90).toFixed(1)}px`,
-          `--spin: ${Math.round(180 + random() * 900)}deg`,
-          `--delay: ${(random() * 0.55).toFixed(3)}s`,
-          `--fall: ${(1.7 + random() * 1.9).toFixed(2)}s`,
-        ].join('; '),
-      }),
-    );
+    const bit = h('span', {
+      class: `confetti__bit confetti__bit--${CONFETTI_TINTS[i % CONFETTI_TINTS.length]}`,
+    });
+    // Custom properties have to go through setProperty. Setting them as a `style`
+    // attribute string leaves them unregistered: every var() in the rule then fails,
+    // the animation shorthand is invalid at computed-value time, animation-name
+    // computes to none, and each piece sits at its initial opacity:0 forever. Measured
+    // in the running window (attribute gave animationName 'none', setProperty 'q-fall'),
+    // not assumed. The order of these five calls is the seeded draw order, so the same
+    // score still produces the same burst.
+    bit.style.setProperty('--x', `${(random() * 100).toFixed(2)}%`);
+    bit.style.setProperty('--drift', `${((random() - 0.5) * 90).toFixed(1)}px`);
+    bit.style.setProperty('--spin', `${Math.round(180 + random() * 900)}deg`);
+    bit.style.setProperty('--delay', `${(random() * 0.55).toFixed(3)}s`);
+    bit.style.setProperty('--fall', `${(1.7 + random() * 1.9).toFixed(2)}s`);
+    layer.append(bit);
   }
   return layer;
 }

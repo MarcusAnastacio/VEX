@@ -1,8 +1,9 @@
 /* The quiz pane: flashcards, the three question types, feedback and the results card.
  *
  * Everything the quiz draws lives inside `.quiz`, so the tokens below are declared there
- * and cascade to every card. base.css is frozen, so nothing here edits a shared token;
- * the band tints are this surface's own.
+ * and cascade to every card. The verdict tints are the shared ones: the ink and its pale
+ * tint are declared in base.css, so a correct answer reads the same here as it does in
+ * the sidebar.
  *
  * Verdicts are tinted, not just coloured: a mark, a tinted panel and a line of the band
  * colour. Correct, partly right and wrong have to be distinguishable without reading the
@@ -15,27 +16,27 @@
   --q-radius-sm: 9px;
   --q-pad: 26px;
   --q-gap: 14px;
-  --q-ok: #7ee0b8;
-  --q-ok-wash: rgba(126, 224, 184, 0.11);
-  --q-ok-line: rgba(126, 224, 184, 0.42);
-  --q-warn: #e8b96a;
-  --q-warn-wash: rgba(232, 185, 106, 0.11);
-  --q-warn-line: rgba(232, 185, 106, 0.4);
-  --q-bad: #ed8796;
-  --q-bad-wash: rgba(237, 135, 150, 0.1);
-  --q-bad-line: rgba(237, 135, 150, 0.38);
+  --q-ok: var(--ok);
+  --q-ok-wash: var(--ok-wash);
+  --q-ok-line: var(--ok-line);
+  --q-warn: var(--warn);
+  --q-warn-wash: var(--warn-wash);
+  --q-warn-line: var(--warn-line);
+  --q-bad: var(--bad);
+  --q-bad-wash: var(--bad-wash);
+  --q-bad-line: var(--bad-line);
 }
 
 /* ── Pane header ─────────────────────────────────────────────────────────── */
 
 .quiz {
   max-width: 880px;
-  padding: 0 32px 56px;
+  padding: 0 24px 48px;
   margin: 0 auto;
 }
 .quiz__kicker {
   color: var(--accent);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 1.4px;
   margin-bottom: 7px;
@@ -60,10 +61,12 @@
 }
 .card-head__kind {
   padding: 2px 8px;
-  color: var(--accent);
+  /* Strong, not plain accent: this sits on the accent tint, where the plain accent is
+   * 4.47:1 at 10.5px. */
+  color: var(--accent-strong);
   background: var(--accent-soft);
   border-radius: 5px;
-  font-size: 9.5px;
+  font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 1px;
   text-transform: uppercase;
@@ -71,7 +74,7 @@
 .card-head__topic {
   min-width: 0;
   color: var(--text-dim);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   overflow-wrap: anywhere;
 }
@@ -83,7 +86,7 @@
 .card-head__hint {
   margin-left: auto;
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 .card-head__lang {
   padding: 2px 7px;
@@ -92,12 +95,12 @@
   border: 1px solid var(--border-soft);
   border-radius: 5px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 10px;
+  font-size: 11px;
 }
 .question__prompt {
   max-width: none;
-  margin: 0 0 20px;
-  font-size: 23px;
+  margin: 0 0 18px;
+  font-size: clamp(21px, 1.4vw + 15px, 32px);
   font-weight: 700;
   line-height: 1.32;
   letter-spacing: -0.2px;
@@ -112,7 +115,7 @@
 }
 .q__actions-hint {
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 /* Focus, everywhere in this surface, in the one treatment. */
@@ -204,7 +207,7 @@
   text-align: left;
 }
 .flashcard .question__prompt {
-  font-size: 24px;
+  font-size: clamp(22px, 1.4vw + 16px, 34px);
 }
 .flashcard__back {
   padding: 16px 18px;
@@ -218,7 +221,7 @@
 .flashcard__back p {
   margin: 0;
   color: var(--text);
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.65;
 }
 .flashcard__reveal {
@@ -226,7 +229,7 @@
 }
 .flashcard--revealed .question__prompt {
   color: var(--text-dim);
-  font-size: 18px;
+  font-size: clamp(17px, 0.8vw + 14px, 22px);
   transition: color 200ms ease, font-size 200ms ease;
 }
 
@@ -241,14 +244,14 @@
   align-items: center;
   gap: 14px;
   width: 100%;
-  padding: 14px 16px;
+  padding: 13px 15px;
   color: var(--text);
   text-align: left;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--q-radius-sm);
   font: inherit;
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.45;
   cursor: pointer;
   transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
@@ -272,7 +275,7 @@
   color: var(--text-dim);
   background: var(--bg-hover);
   border-radius: 5px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
 }
 .option__label {
@@ -289,7 +292,7 @@
 }
 .option__note {
   color: var(--text-faint);
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 700;
   letter-spacing: 0.6px;
   text-transform: uppercase;
@@ -299,7 +302,7 @@
   background: var(--q-ok-wash);
 }
 .option--correct .option__letter {
-  color: var(--bg);
+  color: var(--on-accent);
   background: var(--q-ok);
 }
 .option--correct .option__note {
@@ -310,7 +313,7 @@
   background: var(--q-bad-wash);
 }
 .option--wrong .option__letter {
-  color: var(--bg);
+  color: var(--on-accent);
   background: var(--q-bad);
 }
 .option--wrong .option__note {
@@ -332,7 +335,7 @@
   border: 1px solid var(--border-soft);
   border-radius: var(--q-radius-sm);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12.5px;
+  font-size: 13.5px;
   line-height: 2.1;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -348,7 +351,7 @@
   border-bottom-width: 2px;
   border-radius: 5px;
   font: inherit;
-  font-size: 13px;
+  font-size: 14px;
   vertical-align: baseline;
 }
 .cloze__blank:focus {
@@ -358,7 +361,7 @@
 }
 .cloze__blank::placeholder {
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 .cloze__blank:disabled {
   opacity: 1;
@@ -388,7 +391,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 12px;
+  font-size: 13px;
 }
 .blanks__row .mark {
   flex: 0 0 16px;
@@ -415,14 +418,14 @@
 .blanks__key {
   flex: 0 0 52px;
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
 }
 .blanks__value {
   color: var(--text);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
+  font-size: 13px;
   overflow-wrap: anywhere;
 }
 .blanks__row--wrong .blanks__value {
@@ -433,7 +436,7 @@
 .blanks__expected {
   margin-left: auto;
   color: var(--text-faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 /* ── Open answer ─────────────────────────────────────────────────────────── */
@@ -448,7 +451,7 @@
 .rubric__label {
   margin: 0 0 7px;
   color: var(--text-faint);
-  font-size: 9.5px;
+  font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 1.1px;
   text-transform: uppercase;
@@ -459,7 +462,7 @@
   margin: 0;
   padding: 0;
   color: var(--text-dim);
-  font-size: 12.5px;
+  font-size: 13.5px;
   list-style: none;
 }
 .rubric__list li {
@@ -485,7 +488,7 @@
   border: 1px solid var(--border);
   border-radius: var(--q-radius-sm);
   font: inherit;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
   resize: vertical;
 }
@@ -533,13 +536,13 @@
 .feedback__headline {
   display: block;
   color: var(--text);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
 }
 .feedback__detail {
   margin: 5px 0 0;
   color: var(--text-dim);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
 }
 .feedback__next {
@@ -547,7 +550,7 @@
   justify-self: start;
   margin-top: 16px;
   padding: 8px 16px;
-  font-size: 12.5px;
+  font-size: 13.5px;
 }
 
 /* ── Criteria, inside a verdict ──────────────────────────────────────────── */
@@ -565,7 +568,7 @@
   grid-template-columns: 16px 1fr auto;
   align-items: start;
   gap: 3px 10px;
-  font-size: 12.5px;
+  font-size: 13.5px;
 }
 .criteria__row .mark {
   flex: none;
@@ -596,7 +599,7 @@
 }
 .criteria__verdict {
   color: var(--text-faint);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.8px;
   text-transform: uppercase;
@@ -613,13 +616,13 @@
 .criteria__comment {
   grid-column: 2 / -1;
   color: var(--text-faint);
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-style: italic;
 }
 .criteria__missing {
   margin: 12px 0 0;
   color: var(--text-dim);
-  font-size: 12px;
+  font-size: 13px;
 }
 .criteria__missing strong {
   color: var(--q-warn);
@@ -639,18 +642,18 @@
 }
 .quiz-nav .btn {
   padding: 7px 13px;
-  font-size: 12px;
+  font-size: 13px;
 }
 .quiz-nav__hint {
   color: var(--text-faint);
-  font-size: 11.5px;
+  font-size: 12.5px;
 }
 
 /* ── Results ─────────────────────────────────────────────────────────────── */
 
 .result-card {
   position: relative;
-  padding: 32px 30px 28px;
+  padding: 28px 26px 26px;
   overflow: hidden;
   text-align: center;
   animation: q-rise 260ms ease-out;
@@ -682,14 +685,14 @@
 }
 .result-card__eyebrow {
   color: var(--text-faint);
-  font-size: 9.5px;
+  font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 1.4px;
   text-transform: uppercase;
 }
 .result-card__percent {
   color: var(--text-dim);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
 }
 .result-card__dial {
@@ -699,14 +702,14 @@
 .result-card__score {
   margin: 0;
   color: var(--accent);
-  font-size: 54px;
+  font-size: clamp(48px, 4vw + 32px, 72px);
   font-weight: 800;
   letter-spacing: -1.5px;
   line-height: 1.05;
 }
 .result-card__of {
   color: var(--text-faint);
-  font-size: 22px;
+  font-size: clamp(20px, 1.2vw + 15px, 28px);
   font-weight: 700;
   letter-spacing: -0.5px;
 }
@@ -728,17 +731,17 @@
 .result-card__headline {
   max-width: none;
   margin: 14px 0 10px;
-  font-size: 24px;
+  font-size: clamp(22px, 1.4vw + 16px, 34px);
   font-weight: 700;
   line-height: 1.3;
   letter-spacing: -0.2px;
   color: var(--text);
 }
 .result-card__line {
-  max-width: 54ch;
+  max-width: 60ch;
   margin: 0 auto;
   color: var(--text-dim);
-  font-size: 13.5px;
+  font-size: 14.5px;
   line-height: 1.65;
 }
 .result-card__actions {
@@ -849,7 +852,11 @@
   }
   100% {
     opacity: 0;
-    transform: translate3d(var(--drift), 118%, 0) rotate(var(--spin));
+    /* A percentage in a transform is relative to the element's OWN height, so the
+     * old `118%` moved an 11px bit about 13px and left the whole animation above
+     * the card's top edge, clipped by .confetti{overflow:hidden}. Every one of the
+     * pieces was drawn and none was ever visible. This is a real downward distance. */
+    transform: translate3d(var(--drift), min(420px, 58vh), 0) rotate(var(--spin));
   }
 }
 @keyframes q-glow {
@@ -865,7 +872,7 @@
 /* ── The breakdown, the part that makes the score mean something ──────────── */
 
 .breakdown-wrap {
-  max-width: 520px;
+  max-width: 560px;
   margin: 26px auto 0;
   padding-top: 20px;
   border-top: 1px solid var(--border-soft);
@@ -874,7 +881,7 @@
 .breakdown__summary {
   margin: 0 0 12px;
   color: var(--text-faint);
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 700;
   letter-spacing: 1.1px;
   text-align: center;
@@ -891,7 +898,7 @@
   display: flex;
   align-items: flex-start;
   gap: 11px;
-  font-size: 12.5px;
+  font-size: 13.5px;
 }
 .breakdown__row .mark {
   flex: 0 0 18px;
@@ -933,7 +940,7 @@
 .breakdown__kind {
   flex: 0 0 auto;
   color: var(--text-faint);
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 600;
   letter-spacing: 0.4px;
   text-transform: uppercase;
@@ -999,12 +1006,12 @@
   }
   .question__prompt,
   .flashcard .question__prompt {
-    font-size: 19px;
+    font-size: clamp(20px, 3.4vw, 24px);
   }
   .option {
     gap: 10px 11px;
     padding: 12px 13px;
-    font-size: 14px;
+    font-size: 15px;
     flex-wrap: wrap;
   }
   .option__verdict {
@@ -1015,10 +1022,10 @@
     display: none;
   }
   .result-card__score {
-    font-size: 42px;
+    font-size: clamp(40px, 8vw, 52px);
   }
   .result-card__of {
-    font-size: 18px;
+    font-size: 20px;
   }
   .result-card__actions {
     flex-direction: column-reverse;

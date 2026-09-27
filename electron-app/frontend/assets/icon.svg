@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Agent Quiz">
+  <!--
+    Agent Quiz app icon.
+
+    Source of truth for every PNG in this folder (icon.png, icon-512.png ...
+    icon-16.png). Deliberately minimal so it survives being scaled down to 16px:
+    one opaque indigo squircle ("work surface" the app never blends into) plus a
+    thick white check ("answer accepted" — the quiz motif).
+
+    Constraints this file honours:
+      * no fonts, no text, no remote assets — shapes only, so it renders
+        identically in any rasteriser and inside the app's own CSP
+        (img-src 'self' data:);
+      * flat fills, no gradients/bevels/shadow tricks, so light and dark
+        desktops are equally legible;
+      * the opaque rounded square means the icon never depends on the desktop
+        background or on PNG alpha to be readable.
+    The checkmark stroke is 64/512 = 12.5% of the width, which lands on ~2px at
+    16px — the thinnest stroke that still reads there with round caps/joins.
+  -->
+  <rect width="512" height="512" rx="112" ry="112" fill="#4F46E5"/>
+  <path d="M150 266 L226 342 L366 174"
+        fill="none" stroke="#FFFFFF" stroke-width="64"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

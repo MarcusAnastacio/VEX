@@ -203,9 +203,11 @@ export function sessionSubtitle(session, { readiness } = {}) {
  *   topicSelection   the topic ids currently chosen, or null to follow the plan
  *   onTopicSelectionChange(ids)   onQuizOpen(id)   onQuizResume(id)   onTopicReveal(id)
  *
- * The settings form is rendered only in the generate view. The topics area and the
- * saved-quiz list are rendered in both views that show a conversation, because both
- * are ways of deciding what to study rather than settings for the generator.
+ * The settings form and the topic drop zone are both rendered only in the generate
+ * view, because the drop zone is the settings form's own summary of the deck it will
+ * ask for. The topic list and the saved-quiz list are rendered in both views that show
+ * a conversation, because both are ways of deciding what to study rather than settings
+ * for the generator.
  */
 export function renderSettings(container, props = {}) {
   renderPanelBody(container, props);
@@ -240,6 +242,11 @@ function renderPanelBody(container, props) {
     allTopics,
     chosen,
     busy: Boolean(busy),
+    // Dragging is only meaningful where there is somewhere to drop. The drop zone is the
+    // generate view's, so a row in the transcript view must not offer to be picked up:
+    // a drag that has nowhere to land is a worse affordance than no drag at all. The
+    // Add/Remove toggle is the picking affordance in the transcript view.
+    canDrag: view === 'generate',
     onToggle: (id) => commit(chosen.includes(id) ? chosen.filter((x) => x !== id) : [...chosen, id]),
     onRandomise: () => commit(sampleTopics(allTopics, topicsNeeded({ options, plan }))),
     onReveal: onTopicReveal,
@@ -255,7 +262,16 @@ function renderPanelBody(container, props) {
         : null,
       topicsSection(picker),
       h('div', { class: 'panel__pair' },
-        dropzoneSection({ ...picker, plan, options, capabilities }),
+        // "What you will get" is the generate view's block and nothing else. It is the
+        // second half of the settings form: the counts on it are a promise about the
+        // deck those settings will ask for, and its "Pick for me" button is the
+        // randomise half of the same decision the settings form's counts make. In the
+        // transcript view there is no form to explain it, and it duplicates the
+        // selection the topic list above already shows and controls, topic by topic.
+        // The list's own Add/Remove toggles still drive the selection from here.
+        view === 'generate'
+          ? dropzoneSection({ ...picker, plan, options, capabilities })
+          : null,
         savedQuizzesSection({ quizzes, onOpen: onQuizOpen, onResume: onQuizResume }),
       ),
     ),
@@ -729,7 +745,7 @@ function lengthLine(topic) {
  * then the plan's own selection is shown, so the drop zone is never blank while the
  * generator is quietly using three topics.
  */
-const selection = { key: null, ids: null };
+const selection = { key: null, planKey: null, ids: null };
 function resolveSelection(topicSelection, plan, allTopics) {
   const known = new Set(allTopics.map((t) => t.id));
   const given = Array.isArray(topicSelection) ? topicSelection.map(String).filter((id) => known.has(id)) : null;
@@ -738,11 +754,22 @@ function resolveSelection(topicSelection, plan, allTopics) {
   // quietly using four topics would be a lie.
   const explicit = given && given.length ? given : null;
   const key = explicit ? explicit.join('|') : null;
-  // Only a change to the prop resets the local copy, so a selection the user just
-  // made survives the re-render it caused, and an unrelated state change does not
-  // silently drop it.
-  if (selection.ids === null || key !== selection.key) {
-    selection.key = key;
+  // The plan is the other half of the fallback, so it is the other thing that can
+  // invalidate the local copy. app.js renders this panel twice for one conversation:
+  // once with `plan: null` while its reads are in flight, then again when they land.
+  // A fallback computed on that first, plan-less pass is empty, and keeping it would
+  // hold the drop zone empty for the rest of the session while "Planned topics" above
+  // it listed three. Keying the reset on the plan's own ids is what stops the first
+  // pass's answer outliving the plan it was not allowed to see.
+  const planKey = (plan?.selectedTopics || []).map((t) => String(t.id)).join('|');
+  // Only a change to one of those two resets the local copy, so a selection the user
+  // just made survives the re-render it caused, an explicit choice still outranks a
+  // plan that re-sampled behind it, and an unrelated state change does not silently
+  // drop it.
+  const stale = selection.ids === null || key !== selection.key || (explicit === null && planKey !== selection.planKey);
+  selection.key = key;
+  selection.planKey = planKey;
+  if (stale) {
     selection.ids = explicit ?? (plan?.selectedTopics || []).map((t) => String(t.id)).filter((id) => known.has(id));
   }
   return allTopics.filter((t) => selection.ids.includes(t.id)).map((t) => t.id);
@@ -785,7 +812,7 @@ function sampleTopics(allTopics, count) {
  * The complete list, not the first six. A topic that cannot be seen is a topic that
  * cannot be chosen, and the count is the information this section exists to give.
  */
-function topicsSection({ allTopics, chosen, busy, onToggle, onReveal }) {
+function topicsSection({ allTopics, chosen, busy, onToggle, onReveal, canDrag }) {
   const list = h('ul', { class: 'topics__list' },
     ...allTopics.map((topic) => {
       const selected = chosen.includes(topic.id);
@@ -808,7 +835,7 @@ function topicsSection({ allTopics, chosen, busy, onToggle, onReveal }) {
 
       const item = h('li', {
         class: `topic${selected ? ' topic--on' : ''}`,
-        draggable: busy ? null : 'true',
+        draggable: canDrag && !busy ? 'true' : null,
         'data-topic': topic.id,
         ondragstart: (event) => {
           event.dataTransfer.effectAllowed = 'copy';
